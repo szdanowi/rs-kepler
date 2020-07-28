@@ -1,17 +1,17 @@
 extern crate cairo;
+extern crate gtk;
+extern crate gio;
 extern crate rand;
 
-use cairo::{ ImageSurface, Format, Context };
-use std::fs::File;
+use gio::prelude::*;
+use gtk::prelude::*;
+use std::env::args;
 
-fn main() {
-    let max_x = 1024;
-    let max_y = 768;
+fn paint(drawing_area: &gtk::DrawingArea, context: &cairo::Context) -> gtk::Inhibit {
+    let max_x = drawing_area.get_allocated_width();
+    let max_y = drawing_area.get_allocated_height();
 
-    let surface = ImageSurface::create(Format::ARgb32, max_x, max_y).expect("Failed to create a surface");
-    let context = Context::new(&surface);
-
-    context.set_source_rgb(1.0, 1.0, 1.0);
+    context.set_source_rgb(0.7, 0.7, 0.7);
     context.paint();
 
     context.set_source_rgb(0.1, 0.1, 0.1);
@@ -22,6 +22,28 @@ fn main() {
     }
     context.stroke();
 
-    let mut file = File::create("result.png").expect("Failed to create a file");
-    surface.write_to_png(&mut file).expect("Failed to write to the file");
+    Inhibit(false)
+}
+
+fn build_ui(application: &gtk::Application) {
+    let window = gtk::ApplicationWindow::new(application);
+    let drawing_area = Box::new(gtk::DrawingArea::new)();
+
+    drawing_area.connect_draw(paint);
+
+    window.set_title("rs-kepler");
+    window.set_border_width(0);
+    window.set_position(gtk::WindowPosition::Center);
+    window.set_default_size(1024, 768);
+    window.add(&drawing_area);
+
+    window.show_all();
+}
+
+fn main() {
+    let application = gtk::Application::new(Some("com.rs-kepler"), Default::default())
+        .expect("Failed to initialize GTK application");
+
+    application.connect_activate(|app|{ build_ui(app); });
+    application.run(&args().collect::<Vec<_>>());
 }
