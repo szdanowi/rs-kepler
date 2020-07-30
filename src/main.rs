@@ -18,6 +18,7 @@ struct Coordinate {
     y: f64,
 }
 
+#[derive(Copy, Clone)]
 struct EuclideanVector {
     dx: f64,
     dy: f64,
@@ -26,6 +27,13 @@ struct EuclideanVector {
 impl EuclideanVector {
     fn magnitude(&self) -> f64 {
         (self.dx*self.dx + self.dy*self.dy).sqrt()
+    }
+}
+
+impl std::ops::AddAssign<EuclideanVector> for Coordinate {
+    fn add_assign(&mut self, delta: EuclideanVector) {
+        self.x += delta.dx;
+        self.y += delta.dy;
     }
 }
 
@@ -46,6 +54,10 @@ impl Body {
     pub fn at(mut self, arg: Coordinate) -> Self { self.position = arg; self }
     pub fn moving(mut self, arg: EuclideanVector) -> Self { self.velocity = arg; self }
     pub fn with_mass(mut self, arg: f64) -> Self { self.mass = arg; self }
+
+    pub fn update(&mut self) {
+        self.position += self.velocity;
+    }
 }
 
 struct Situation {
@@ -56,6 +68,12 @@ impl Situation {
     pub fn new() -> Situation { Situation { bodies: Vec::<Body>::new() } }
     pub fn with(mut self, body: Body) -> Self { self.add(body); self }
     pub fn add(&mut self, body: Body) { self.bodies.push(body); }
+
+    pub fn update(&mut self) {
+        for body in self.bodies.iter_mut() {
+            body.update();
+        }
+    }
 }
 
 // ---
@@ -135,16 +153,23 @@ fn main() {
         Body::new().with_mass(10.).at(Coordinate{x: 0., y: 0.}).moving(EuclideanVector{dx: 0., dy: 0.})
     ).with(
         Body::new().with_mass(2.).at(Coordinate{x: 100., y: 0.}).moving(EuclideanVector{dx: 0., dy: 1.})
+    ).with(
+        Body::new().with_mass(20.).at(Coordinate{x: 200., y: 10.}).moving(EuclideanVector{dx: 0., dy: -1.})
     )));
 
     let application = gtk::Application::new(Some("com.rs-kepler"), Default::default())
         .expect("Failed to initialize GTK application");
 
-    let captured_model = Rc::clone(&model);
+    let activation_captured_model = Rc::clone(&model);
     application.connect_activate(move |app| {
-        build_ui(app, Rc::clone(&captured_model));
+        build_ui(app, Rc::clone(&activation_captured_model));
+
+        let timeout_captured_model = activation_captured_model.clone();
+        gtk::timeout_add(100, move || {
+            timeout_captured_model.borrow_mut().update();
+            glib::Continue(true)
+        });
     });
 
-    model.borrow_mut().add(Body::new().with_mass(20.).at(Coordinate{x: 200., y: 10.}).moving(EuclideanVector{dx: 0., dy: -1.}));
     application.run(&args().collect::<Vec<_>>());
 }
