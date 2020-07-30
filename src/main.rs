@@ -18,6 +18,18 @@ struct EuclideanVector {
     dy: f64,
 }
 
+impl EuclideanVector {
+    fn magnitude(&self) -> f64 {
+        (self.dx*self.dx + self.dy*self.dy).sqrt()
+    }
+}
+
+impl std::cmp::PartialEq<f64> for EuclideanVector {
+    fn eq(&self, other: &f64) -> bool {
+        self.magnitude() == *other
+    }
+}
+
 struct Body {
     position: Coordinate,
     mass: f64,
@@ -52,10 +64,12 @@ impl CairoPaintable for Body {
         context.arc(self.position.x, self.position.y, self.mass, 0., PI*2.);
         context.stroke();
 
-        context.set_source_rgb(0., 0., 1.);
-        context.move_to(self.position.x, self.position.y);
-        context.line_to(self.position.x + (10. * self.velocity.dx), self.position.y + (10. * self.velocity.dy));
-        context.stroke();
+        if self.velocity != 0. {
+            context.set_source_rgb(0., 0., 1.);
+            context.move_to(self.position.x, self.position.y);
+            context.line_to(self.position.x + (10. * self.velocity.dx), self.position.y + (10. * self.velocity.dy));
+            context.stroke();
+        }
     }
 }
 
