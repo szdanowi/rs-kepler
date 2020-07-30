@@ -61,18 +61,27 @@ trait CairoPaintable {
     fn paint_on(&self, context: &cairo::Context);
 }
 
+impl CairoPaintable for EuclideanVector {
+    fn paint_on(&self, context: &cairo::Context) {
+        if self.magnitude() == 0. { return; }
+
+        context.set_source_rgb(0., 0., 1.);
+        context.move_to(0., 0.);
+        context.line_to(10. * self.dx, 10. * self.dy);
+        context.stroke();
+    }
+}
+
 impl CairoPaintable for Body {
     fn paint_on(&self, context: &cairo::Context) {
+        context.save();
+        context.translate(self.position.x, self.position.y);
         context.set_source_rgb(1., 1., 1.);
-        context.arc(self.position.x, self.position.y, self.mass, 0., PI*2.);
+        context.arc(0., 0., self.mass, 0., PI*2.);
         context.stroke();
 
-        if self.velocity != 0. {
-            context.set_source_rgb(0., 0., 1.);
-            context.move_to(self.position.x, self.position.y);
-            context.line_to(self.position.x + (10. * self.velocity.dx), self.position.y + (10. * self.velocity.dy));
-            context.stroke();
-        }
+        self.velocity.paint_on(context);
+        context.restore();
     }
 }
 
