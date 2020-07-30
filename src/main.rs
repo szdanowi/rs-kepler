@@ -230,7 +230,7 @@ fn build_ui(application: &gtk::Application, model: Rc<RefCell<Situation>>) {
 
     window.show_all();
 
-    gtk::timeout_add(100, move || { drawing_area.queue_draw(); glib::Continue(true) });
+    gtk::timeout_add(30, move || { drawing_area.queue_draw(); glib::Continue(true) });
 }
 
 fn main() {
