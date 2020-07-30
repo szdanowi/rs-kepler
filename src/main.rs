@@ -14,7 +14,7 @@ use std::rc::Rc;
 use std::cell::RefCell;
 use std::ptr;
 
-const GRAVITATIONAL_CONSTANT: f64 = 100.;
+const GRAVITATIONAL_CONSTANT: f64 = 10.;
 const VECTOR_MAGNIFICATION: f64 = 25.;
 
 #[derive(Copy, Clone)]
@@ -51,11 +51,26 @@ impl std::ops::AddAssign<EuclideanVector> for Coordinate {
     }
 }
 
+impl std::ops::AddAssign for EuclideanVector {
+    fn add_assign(&mut self, other: EuclideanVector) {
+        self.dx += other.dx;
+        self.dy += other.dy;
+    }
+}
+
 impl std::ops::Mul<f64> for EuclideanVector {
     type Output = Self;
 
     fn mul(self, scalar: f64) -> Self {
         Self{dx: self.dx * scalar, dy: self.dy * scalar}
+    }
+}
+
+impl std::ops::Div<f64> for EuclideanVector {
+    type Output = Self;
+
+    fn div(self, scalar: f64) -> Self {
+        Self{dx: self.dx / scalar, dy: self.dy / scalar}
     }
 }
 
@@ -80,6 +95,11 @@ impl Body {
 
     pub fn update(&mut self) {
         self.position += self.velocity;
+
+        for force in self.forces.iter() {
+            let acceleration = *force / self.mass;
+            self.velocity += acceleration; // * 1 unit of time
+        }
     }
 
     pub fn pull_from(&self, other: &Self) -> EuclideanVector {
@@ -215,11 +235,11 @@ fn build_ui(application: &gtk::Application, model: Rc<RefCell<Situation>>) {
 
 fn main() {
     let model = Rc::new(RefCell::new(Situation::new().with(
-        Body::new().with_mass(10.).at(Coordinate{x: 0., y: 0.}).moving(EuclideanVector{dx: 0., dy: 0.})
+        Body::new().with_mass(70.).at(Coordinate{x: 0., y: 0.}).moving(EuclideanVector{dx: 0., dy: 0.})
     ).with(
-        Body::new().with_mass(2.).at(Coordinate{x: 100., y: 0.}).moving(EuclideanVector{dx: 0., dy: 1.})
+        Body::new().with_mass(1.).at(Coordinate{x: 150., y: 0.}).moving(EuclideanVector{dx: 0., dy: 2.})
     ).with(
-        Body::new().with_mass(20.).at(Coordinate{x: 200., y: 10.}).moving(EuclideanVector{dx: 0., dy: -1.})
+        Body::new().with_mass(1.).at(Coordinate{x: -400., y: 0.}).moving(EuclideanVector{dx: 0., dy: 1.})
     )));
 
     let application = gtk::Application::new(Some("com.rs-kepler"), Default::default())
@@ -230,7 +250,7 @@ fn main() {
         build_ui(app, Rc::clone(&activation_captured_model));
 
         let timeout_captured_model = activation_captured_model.clone();
-        gtk::timeout_add(100, move || {
+        gtk::timeout_add(20, move || {
             timeout_captured_model.borrow_mut().update();
             glib::Continue(true)
         });
