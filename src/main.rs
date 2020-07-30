@@ -7,6 +7,8 @@ use gio::prelude::*;
 use gtk::prelude::*;
 use std::env::args;
 use std::f64::consts::PI;
+use std::rc::Rc;
+use std::cell::RefCell;
 
 struct Coordinate {
     x: f64,
@@ -49,7 +51,8 @@ struct Situation {
 
 impl Situation {
     pub fn new() -> Situation { Situation { bodies: Vec::<Body>::new() } }
-    pub fn with(mut self, body: Body) -> Self { self.bodies.push(body); self }
+    pub fn with(mut self, body: Body) -> Self { self.add(body); self }
+    pub fn add(&mut self, body: Body) { self.bodies.push(body); }
 }
 
 // ---
@@ -86,17 +89,12 @@ fn paint(drawing_area: &gtk::DrawingArea, context: &cairo::Context, situation: &
     Inhibit(false)
 }
 
-fn build_ui(application: &gtk::Application) {
+fn build_ui(application: &gtk::Application, model: Rc<RefCell<Situation>>) {
     let window = gtk::ApplicationWindow::new(application);
     let drawing_area = gtk::DrawingArea::new();
-    let model = Situation::new().with(
-        Body::new().with_mass(10.).at(Coordinate{x: 0., y: 0.}).moving(EuclideanVector{dx: 0., dy: 0.})
-    ).with(
-        Body::new().with_mass(2.).at(Coordinate{x: 100., y: 0.}).moving(EuclideanVector{dx: 0., dy: 1.})
-    );
 
     drawing_area.connect_draw(move |drawing_area, cairo_context|{
-        paint(drawing_area, cairo_context, &model)
+        paint(drawing_area, cairo_context, &model.borrow())
     });
 
     window.set_title("rs-kepler");
@@ -109,9 +107,20 @@ fn build_ui(application: &gtk::Application) {
 }
 
 fn main() {
+    let model = Rc::new(RefCell::new(Situation::new().with(
+        Body::new().with_mass(10.).at(Coordinate{x: 0., y: 0.}).moving(EuclideanVector{dx: 0., dy: 0.})
+    ).with(
+        Body::new().with_mass(2.).at(Coordinate{x: 100., y: 0.}).moving(EuclideanVector{dx: 0., dy: 1.})
+    )));
+
     let application = gtk::Application::new(Some("com.rs-kepler"), Default::default())
         .expect("Failed to initialize GTK application");
 
-    application.connect_activate(|app|{ build_ui(app); });
+    let captured_model = Rc::clone(&model);
+    application.connect_activate(move |app| {
+        build_ui(app, Rc::clone(&captured_model));
+    });
+
+    model.borrow_mut().add(Body::new().with_mass(20.).at(Coordinate{x: 200., y: 10.}).moving(EuclideanVector{dx: 0., dy: -1.}));
     application.run(&args().collect::<Vec<_>>());
 }
