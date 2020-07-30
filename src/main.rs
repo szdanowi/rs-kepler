@@ -1,10 +1,13 @@
 extern crate cairo;
 extern crate gtk;
 extern crate gio;
+extern crate glib;
 extern crate rand;
+extern crate chrono;
 
 use gio::prelude::*;
 use gtk::prelude::*;
+use chrono::prelude::*;
 use std::env::args;
 use std::f64::consts::PI;
 use std::rc::Rc;
@@ -85,6 +88,13 @@ impl CairoPaintable for Body {
     }
 }
 
+fn print_debug(context: &cairo::Context) {
+    context.set_source_rgb(1., 1., 1.);
+    context.move_to(10., 15.);
+    let time = format!("{}", Local::now().format("%Y-%m-%d %H:%M:%S"));
+    context.show_text(&time);
+}
+
 fn paint(drawing_area: &gtk::DrawingArea, context: &cairo::Context, situation: &Situation) -> gtk::Inhibit {
     let max_x = f64::from(drawing_area.get_allocated_width());
     let max_y = f64::from(drawing_area.get_allocated_height());
@@ -92,9 +102,12 @@ fn paint(drawing_area: &gtk::DrawingArea, context: &cairo::Context, situation: &
     context.set_source_rgb(0.05, 0.05, 0.05);
     context.paint();
 
+    context.save();
     context.translate(max_x / 2., max_y / 2.);
     for body in situation.bodies.iter() { body.paint_on(context); }
+    context.restore();
 
+    print_debug(context);
     Inhibit(false)
 }
 
@@ -113,6 +126,8 @@ fn build_ui(application: &gtk::Application, model: Rc<RefCell<Situation>>) {
     window.add(&drawing_area);
 
     window.show_all();
+
+    gtk::timeout_add(100, move || { drawing_area.queue_draw(); glib::Continue(true) });
 }
 
 fn main() {
