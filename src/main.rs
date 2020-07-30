@@ -65,19 +65,15 @@ impl std::cmp::PartialEq<f64> for EuclideanVector {
     }
 }
 
-struct Force {
-    anchor: Coordinate,
-    vector: EuclideanVector,
-}
-
 struct Body {
     position: Coordinate,
     mass: f64,
     velocity: EuclideanVector,
+    forces: Vec<EuclideanVector>,
 }
 
 impl Body {
-    pub fn new() -> Body { Body{position: Coordinate{x: 0., y:0.}, mass: 0., velocity: EuclideanVector{dx: 0., dy: 0.}} }
+    pub fn new() -> Body { Body{position: Coordinate{x: 0., y:0.}, mass: 0., velocity: EuclideanVector{dx: 0., dy: 0.}, forces: Vec::<EuclideanVector>::new()} }
     pub fn at(mut self, arg: Coordinate) -> Self { self.position = arg; self }
     pub fn moving(mut self, arg: EuclideanVector) -> Self { self.velocity = arg; self }
     pub fn with_mass(mut self, arg: f64) -> Self { self.mass = arg; self }
@@ -86,13 +82,15 @@ impl Body {
         self.position += self.velocity;
     }
 
-    pub fn pull_from(&self, other: &Self) -> Force {
+    pub fn pull_from(&self, other: &Self) -> EuclideanVector {
         let joining_vector = EuclideanVector::between(self.position, other.position);
         let distance = joining_vector.magnitude();
-        Force{
-            anchor: self.position,
-            vector: joining_vector.versor() * ((self.mass * other.mass) / (distance * distance)) * GRAVITATIONAL_CONSTANT,
-        }
+
+        joining_vector.versor() * ((self.mass * other.mass) / (distance * distance)) * GRAVITATIONAL_CONSTANT
+    }
+
+    pub fn add_pull_from(&mut self, other: &Self) {
+        self.forces.push(self.pull_from(other));
     }
 }
 
@@ -104,26 +102,32 @@ impl std::cmp::PartialEq for Body {
 
 struct Situation {
     bodies: Vec<Body>,
-    forces: Vec<Force>,
 }
 
 impl Situation {
-    pub fn new() -> Situation { Situation { bodies: Vec::<Body>::new(), forces: Vec::<Force>::new() } }
+    pub fn new() -> Situation { Situation { bodies: Vec::<Body>::new() } }
     pub fn with(mut self, body: Body) -> Self { self.add(body); self }
     pub fn add(&mut self, body: Body) { self.bodies.push(body); }
 
     pub fn update(&mut self) {
-        for body in self.bodies.iter_mut() {
+        for i in 0..self.bodies.len() {
+            let (head, tail) = self.bodies.split_at_mut(i);
+            let (body, tail) = tail.split_at_mut(1);
+            let body = &mut body[0];
+
             body.update();
-        }
-        self.forces.clear();
-        for body in self.bodies.iter() {
-            for other_body in self.bodies.iter() {
-                if body != other_body {
-                    self.forces.push(body.pull_from(other_body));
-                }
+            body.forces.clear();
+
+            for other_body in head.iter_mut().chain(tail) {
+                body.add_pull_from(other_body);
             }
         }
+    }
+
+    pub fn count_forces(&self) -> usize {
+        let mut result = 0;
+        for body in self.bodies.iter() { result += body.forces.len(); }
+        result
     }
 }
 
@@ -155,17 +159,8 @@ impl CairoPaintable for Body {
         context.set_source_rgb(0., 0., 1.);
         self.velocity.paint_on(context);
 
-        context.restore();
-    }
-}
-
-impl CairoPaintable for Force {
-    fn paint_on(&self, context: &cairo::Context) {
-        context.save();
-
-        context.translate(self.anchor.x, self.anchor.y);
         context.set_source_rgb(1., 0., 0.);
-        self.vector.paint_on(context);
+        for force in self.forces.iter() { force.paint_on(context); }
 
         context.restore();
     }
@@ -180,7 +175,7 @@ fn print_debug(context: &cairo::Context, situation: &Situation) {
     context.set_source_rgb(1., 1., 1.);
     print_text(context, 10., 15., format!("{}", Local::now().format("%Y-%m-%d %H:%M:%S")));
     print_text(context, 10., 25., format!("bodies: {}", situation.bodies.len()));
-    print_text(context, 10., 35., format!("forces: {}", situation.forces.len()));
+    print_text(context, 10., 35., format!("forces: {}", situation.count_forces()));
 }
 
 fn paint(drawing_area: &gtk::DrawingArea, context: &cairo::Context, situation: &Situation) -> gtk::Inhibit {
@@ -193,7 +188,6 @@ fn paint(drawing_area: &gtk::DrawingArea, context: &cairo::Context, situation: &
     context.save();
     context.translate(max_x / 2., max_y / 2.);
     for body in situation.bodies.iter() { body.paint_on(context); }
-    for force in situation.forces.iter() { force.paint_on(context); }
     context.restore();
 
     print_debug(context, situation);
