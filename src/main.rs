@@ -83,15 +83,31 @@ impl std::cmp::PartialEq<f64> for EuclideanVector {
 struct Body {
     position: Coordinate,
     mass: f64,
+    radius: f64,
     velocity: EuclideanVector,
     forces: Vec<EuclideanVector>,
 }
 
 impl Body {
-    pub fn new() -> Body { Body{position: Coordinate{x: 0., y:0.}, mass: 0., velocity: EuclideanVector{dx: 0., dy: 0.}, forces: Vec::<EuclideanVector>::new()} }
+    const DENSITY: f64 = 3.;
+
+    pub fn new() -> Body {
+        Body{
+            position: Coordinate{x: 0., y:0.},
+            mass: 0.,
+            radius: 0.,
+            velocity: EuclideanVector{dx: 0., dy: 0.},
+            forces: Vec::<EuclideanVector>::new()
+        }
+    }
     pub fn at(mut self, arg: Coordinate) -> Self { self.position = arg; self }
     pub fn moving(mut self, arg: EuclideanVector) -> Self { self.velocity = arg; self }
-    pub fn with_mass(mut self, arg: f64) -> Self { self.mass = arg; self }
+    pub fn with_mass(mut self, arg: f64) -> Self {
+        self.mass = arg;
+        let volume = self.mass / Self::DENSITY;
+        self.radius = ((3. / (4. * PI)) * volume).powf(0.33);
+        self
+    }
 
     pub fn update(&mut self) {
         self.position += self.velocity;
@@ -173,7 +189,7 @@ impl CairoPaintable for Body {
 
         context.translate(self.position.x, self.position.y);
         context.set_source_rgb(1., 1., 1.);
-        context.arc(0., 0., self.mass, 0., PI*2.);
+        context.arc(0., 0., self.radius, 0., PI*2.);
         context.stroke();
 
         context.set_source_rgb(0., 0., 1.);
