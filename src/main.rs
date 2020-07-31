@@ -16,6 +16,9 @@ use std::ptr;
 
 const GRAVITATIONAL_CONSTANT: f64 = 10.;
 const VECTOR_MAGNIFICATION: f64 = 25.;
+const REFRESH_RATE: u32 = 50; // per second
+const UPDATE_RATE: u32 = 50; // per second
+const TRAIL_HISTORY: u32 = 2000;
 
 #[derive(Copy, Clone)]
 struct Coordinate {
@@ -136,12 +139,24 @@ impl std::cmp::PartialEq for Body {
     }
 }
 
+struct Mark {
+    position: Coordinate,
+    age: u32,
+}
+
+impl Mark {
+    fn new(at: Coordinate) -> Self { Self{ position: at, age: 0 } }
+    fn update(&mut self) { self.age += 1; }
+}
+
 struct Situation {
     bodies: Vec<Body>,
+    marks: Vec<Mark>,
+    updates: u64,
 }
 
 impl Situation {
-    pub fn new() -> Situation { Situation { bodies: Vec::<Body>::new() } }
+    pub fn new() -> Situation { Situation { bodies: Vec::<Body>::new(), marks: Vec::<Mark>::new(), updates: 0 } }
     pub fn with(mut self, body: Body) -> Self { self.add(body); self }
     pub fn add(&mut self, body: Body) { self.bodies.push(body); }
 
@@ -157,7 +172,17 @@ impl Situation {
             for other_body in head.iter_mut().chain(tail) {
                 body.add_pull_from(other_body);
             }
+
+            if self.updates % (u64::from(REFRESH_RATE) / 10) == 0 {
+                self.marks.push(Mark::new(body.position));
+            }
         }
+
+        for mark in self.marks.iter_mut() {
+            mark.update();
+        }
+        self.marks.retain(|mark| mark.age < TRAIL_HISTORY);
+        self.updates += 1;
     }
 
     pub fn count_forces(&self) -> usize {
@@ -202,6 +227,20 @@ impl CairoPaintable for Body {
     }
 }
 
+impl CairoPaintable for Mark {
+    fn paint_on(&self, context: &cairo::Context) {
+        context.save();
+        context.translate(self.position.x, self.position.y);
+
+        let brightness = 0.7 * f64::max(0.05, f64::from(TRAIL_HISTORY - self.age) / f64::from(TRAIL_HISTORY));
+        context.set_source_rgb(brightness, brightness, brightness);
+        context.arc(0., 0., 1., 0., PI*2.);
+        context.fill();
+
+        context.restore();
+    }
+}
+
 fn print_text(context: &cairo::Context, x: f64, y:f64, text: String) {
     context.move_to(x, y);
     context.show_text(&text);
@@ -224,6 +263,7 @@ fn paint(drawing_area: &gtk::DrawingArea, context: &cairo::Context, situation: &
     context.save();
     context.translate(max_x / 2., max_y / 2.);
     for body in situation.bodies.iter() { body.paint_on(context); }
+    for mark in situation.marks.iter() { mark.paint_on(context); }
     context.restore();
 
     print_debug(context, situation);
@@ -246,7 +286,7 @@ fn build_ui(application: &gtk::Application, model: Rc<RefCell<Situation>>) {
 
     window.show_all();
 
-    gtk::timeout_add(30, move || { drawing_area.queue_draw(); glib::Continue(true) });
+    gtk::timeout_add(1000 / REFRESH_RATE, move || { drawing_area.queue_draw(); glib::Continue(true) });
 }
 
 fn main() {
@@ -256,6 +296,8 @@ fn main() {
         Body::new().with_mass(1.).at(Coordinate{x: 150., y: 0.}).moving(EuclideanVector{dx: 0., dy: 2.})
     ).with(
         Body::new().with_mass(1.).at(Coordinate{x: -400., y: 0.}).moving(EuclideanVector{dx: 0., dy: 1.})
+    ).with(
+        Body::new().with_mass(0.1).at(Coordinate{x: 0., y: -300.}).moving(EuclideanVector{dx: 0.9, dy: 0.})
     )));
 
     let application = gtk::Application::new(Some("com.rs-kepler"), Default::default())
@@ -266,7 +308,7 @@ fn main() {
         build_ui(app, Rc::clone(&activation_captured_model));
 
         let timeout_captured_model = activation_captured_model.clone();
-        gtk::timeout_add(20, move || {
+        gtk::timeout_add(1000 / UPDATE_RATE, move || {
             timeout_captured_model.borrow_mut().update();
             glib::Continue(true)
         });
