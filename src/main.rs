@@ -115,7 +115,7 @@ impl Body {
     pub fn update(&mut self) {
         self.position += self.velocity;
 
-        for force in self.forces.iter() {
+        for force in &self.forces {
             let acceleration = *force / self.mass;
             self.velocity += acceleration; // * 1 unit of time
         }
@@ -178,7 +178,7 @@ impl Situation {
             }
         }
 
-        for mark in self.marks.iter_mut() {
+        for mark in &mut self.marks {
             mark.update();
         }
         self.marks.retain(|mark| mark.age < TRAIL_HISTORY);
@@ -187,7 +187,7 @@ impl Situation {
 
     pub fn count_forces(&self) -> usize {
         let mut result = 0;
-        for body in self.bodies.iter() { result += body.forces.len(); }
+        for body in &self.bodies { result += body.forces.len(); }
         result
     }
 }
@@ -221,7 +221,7 @@ impl CairoPaintable for Body {
         self.velocity.paint_on(context);
 
         context.set_source_rgb(1., 0., 0.);
-        for force in self.forces.iter() { force.paint_on(context); }
+        for force in &self.forces { force.paint_on(context); }
 
         context.restore();
     }
@@ -262,8 +262,8 @@ fn paint(drawing_area: &gtk::DrawingArea, context: &cairo::Context, situation: &
 
     context.save();
     context.translate(max_x / 2., max_y / 2.);
-    for body in situation.bodies.iter() { body.paint_on(context); }
-    for mark in situation.marks.iter() { mark.paint_on(context); }
+    for body in &situation.bodies { body.paint_on(context); }
+    for mark in &situation.marks { mark.paint_on(context); }
     context.restore();
 
     print_debug(context, situation);
