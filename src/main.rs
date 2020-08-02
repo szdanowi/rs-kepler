@@ -1,10 +1,3 @@
-extern crate cairo;
-extern crate gtk;
-extern crate gio;
-extern crate glib;
-extern crate rand;
-extern crate chrono;
-
 use gio::prelude::*;
 use gtk::prelude::*;
 use chrono::prelude::*;
