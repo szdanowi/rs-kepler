@@ -5,7 +5,6 @@ use std::env::args;
 use std::f64::consts::PI;
 use std::rc::Rc;
 use std::cell::RefCell;
-use std::ptr;
 
 const GRAVITATIONAL_CONSTANT: f64 = 10.;
 const VECTOR_MAGNIFICATION: f64 = 25.;
@@ -128,7 +127,7 @@ impl Body {
 
 impl std::cmp::PartialEq for Body {
     fn eq(&self, other: &Self) -> bool {
-        ptr::eq(self, other)
+        self == other
     }
 }
 
