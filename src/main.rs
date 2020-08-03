@@ -5,6 +5,7 @@ use std::env::args;
 use std::f64::consts::PI;
 use std::rc::Rc;
 use std::cell::RefCell;
+use derive_more::{AddAssign, Div, Mul};
 
 const GRAVITATIONAL_CONSTANT: f64 = 10.;
 const VECTOR_MAGNIFICATION: f64 = 25.;
@@ -18,7 +19,7 @@ struct Coordinate {
     y: f64,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, AddAssign, Div, Mul)]
 struct EuclideanVector {
     dx: f64,
     dy: f64,
@@ -43,29 +44,6 @@ impl std::ops::AddAssign<EuclideanVector> for Coordinate {
     fn add_assign(&mut self, delta: EuclideanVector) {
         self.x += delta.dx;
         self.y += delta.dy;
-    }
-}
-
-impl std::ops::AddAssign for EuclideanVector {
-    fn add_assign(&mut self, other: EuclideanVector) {
-        self.dx += other.dx;
-        self.dy += other.dy;
-    }
-}
-
-impl std::ops::Mul<f64> for EuclideanVector {
-    type Output = Self;
-
-    fn mul(self, scalar: f64) -> Self {
-        Self{dx: self.dx * scalar, dy: self.dy * scalar}
-    }
-}
-
-impl std::ops::Div<f64> for EuclideanVector {
-    type Output = Self;
-
-    fn div(self, scalar: f64) -> Self {
-        Self{dx: self.dx / scalar, dy: self.dy / scalar}
     }
 }
 
