@@ -1,5 +1,6 @@
 use chrono::prelude::*;
 use derive_more::{AddAssign, Div, Mul};
+use gdk::*;
 use gio::prelude::*;
 use gtk::prelude::*;
 use std::cell::RefCell;
@@ -133,6 +134,7 @@ struct Situation {
     bodies: Vec<Body>,
     marks: Vec<Mark>,
     updates: u64,
+    zoom: f64,
 }
 
 impl Situation {
@@ -141,6 +143,7 @@ impl Situation {
             bodies: Vec::<Body>::new(),
             marks: Vec::<Mark>::new(),
             updates: 0,
+            zoom: 1.,
         }
     }
     pub fn with(mut self, body: Body) -> Self {
@@ -253,6 +256,7 @@ fn paint(drawing_area: &gtk::DrawingArea, context: &cairo::Context, situation: &
 
     context.save();
     context.translate(max_x / 2., max_y / 2.);
+    context.scale(situation.zoom, situation.zoom);
     for body in &situation.bodies { body.paint_on(context); }
     for mark in &situation.marks { mark.paint_on(context); }
     context.restore();
@@ -265,8 +269,9 @@ fn build_ui(application: &gtk::Application, model: Rc<RefCell<Situation>>) {
     let window = gtk::ApplicationWindow::new(application);
     let drawing_area = gtk::DrawingArea::new();
 
+    let draw_captured_model = Rc::clone(&model);
     drawing_area.connect_draw(move |drawing_area, cairo_context| {
-        paint(drawing_area, cairo_context, &model.borrow())
+        paint(drawing_area, cairo_context, &draw_captured_model.borrow())
     });
 
     window.set_title("rs-kepler");
@@ -274,6 +279,18 @@ fn build_ui(application: &gtk::Application, model: Rc<RefCell<Situation>>) {
     window.set_position(gtk::WindowPosition::Center);
     window.set_default_size(1024, 768);
     window.add(&drawing_area);
+
+    let keys_captured_model = Rc::clone(&model);
+    window.connect_key_press_event(move |window, gdk| {
+        match gdk.get_keyval() {
+            keys::constants::F11 => window.fullscreen(),
+            keys::constants::F12 => window.unfullscreen(),
+            keys::constants::plus => keys_captured_model.borrow_mut().zoom *= 2.,
+            keys::constants::minus => keys_captured_model.borrow_mut().zoom /= 2.,
+            _ => (),
+        }
+        Inhibit(false)
+    });
 
     window.show_all();
 
