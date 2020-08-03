@@ -1,11 +1,11 @@
+use chrono::prelude::*;
+use derive_more::{AddAssign, Div, Mul};
 use gio::prelude::*;
 use gtk::prelude::*;
-use chrono::prelude::*;
+use std::cell::RefCell;
 use std::env::args;
 use std::f64::consts::PI;
 use std::rc::Rc;
-use std::cell::RefCell;
-use derive_more::{AddAssign, Div, Mul};
 
 const GRAVITATIONAL_CONSTANT: f64 = 10.;
 const VECTOR_MAGNIFICATION: f64 = 25.;
@@ -27,16 +27,16 @@ struct EuclideanVector {
 
 impl EuclideanVector {
     fn between(from: Coordinate, to: Coordinate) -> Self {
-        Self{dx: to.x - from.x, dy: to.y - from.y}
+        Self { dx: to.x - from.x, dy: to.y - from.y }
     }
 
     fn magnitude(&self) -> f64 {
-        (self.dx*self.dx + self.dy*self.dy).sqrt()
+        (self.dx * self.dx + self.dy * self.dy).sqrt()
     }
 
     fn versor(&self) -> Self {
         let len = self.magnitude();
-        Self{dx: self.dx / len, dy: self.dy / len}
+        Self { dx: self.dx / len, dy: self.dy / len }
     }
 }
 
@@ -65,16 +65,22 @@ impl Body {
     const DENSITY: f64 = 3.;
 
     pub fn new() -> Body {
-        Body{
-            position: Coordinate{x: 0., y:0.},
+        Body {
+            position: Coordinate { x: 0., y: 0. },
             mass: 0.,
             radius: 0.,
-            velocity: EuclideanVector{dx: 0., dy: 0.},
-            forces: Vec::<EuclideanVector>::new()
+            velocity: EuclideanVector { dx: 0., dy: 0. },
+            forces: Vec::<EuclideanVector>::new(),
         }
     }
-    pub fn at(mut self, arg: Coordinate) -> Self { self.position = arg; self }
-    pub fn moving(mut self, arg: EuclideanVector) -> Self { self.velocity = arg; self }
+    pub fn at(mut self, arg: Coordinate) -> Self {
+        self.position = arg;
+        self
+    }
+    pub fn moving(mut self, arg: EuclideanVector) -> Self {
+        self.velocity = arg;
+        self
+    }
     pub fn with_mass(mut self, arg: f64) -> Self {
         self.mass = arg;
         let volume = self.mass / Self::DENSITY;
@@ -115,8 +121,12 @@ struct Mark {
 }
 
 impl Mark {
-    fn new(at: Coordinate) -> Self { Self{ position: at, age: 0 } }
-    fn update(&mut self) { self.age += 1; }
+    fn new(at: Coordinate) -> Self {
+        Self { position: at, age: 0 }
+    }
+    fn update(&mut self) {
+        self.age += 1;
+    }
 }
 
 struct Situation {
@@ -126,9 +136,20 @@ struct Situation {
 }
 
 impl Situation {
-    pub fn new() -> Situation { Situation { bodies: Vec::<Body>::new(), marks: Vec::<Mark>::new(), updates: 0 } }
-    pub fn with(mut self, body: Body) -> Self { self.add(body); self }
-    pub fn add(&mut self, body: Body) { self.bodies.push(body); }
+    pub fn new() -> Situation {
+        Situation {
+            bodies: Vec::<Body>::new(),
+            marks: Vec::<Mark>::new(),
+            updates: 0,
+        }
+    }
+    pub fn with(mut self, body: Body) -> Self {
+        self.add(body);
+        self
+    }
+    pub fn add(&mut self, body: Body) {
+        self.bodies.push(body);
+    }
 
     pub fn update(&mut self) {
         for i in 0..self.bodies.len() {
@@ -184,7 +205,7 @@ impl CairoPaintable for Body {
 
         context.translate(self.position.x, self.position.y);
         context.set_source_rgb(1., 1., 1.);
-        context.arc(0., 0., self.radius, 0., PI*2.);
+        context.arc(0., 0., self.radius, 0., PI * 2.);
         context.stroke();
 
         context.set_source_rgb(0., 0., 1.);
@@ -204,14 +225,14 @@ impl CairoPaintable for Mark {
 
         let brightness = 0.7 * f64::max(0.05, f64::from(TRAIL_HISTORY - self.age) / f64::from(TRAIL_HISTORY));
         context.set_source_rgb(brightness, brightness, brightness);
-        context.arc(0., 0., 1., 0., PI*2.);
+        context.arc(0., 0., 1., 0., PI * 2.);
         context.fill();
 
         context.restore();
     }
 }
 
-fn print_text(context: &cairo::Context, x: f64, y:f64, text: String) {
+fn print_text(context: &cairo::Context, x: f64, y: f64, text: String) {
     context.move_to(x, y);
     context.show_text(&text);
 }
@@ -244,7 +265,7 @@ fn build_ui(application: &gtk::Application, model: Rc<RefCell<Situation>>) {
     let window = gtk::ApplicationWindow::new(application);
     let drawing_area = gtk::DrawingArea::new();
 
-    drawing_area.connect_draw(move |drawing_area, cairo_context|{
+    drawing_area.connect_draw(move |drawing_area, cairo_context| {
         paint(drawing_area, cairo_context, &model.borrow())
     });
 
@@ -256,7 +277,10 @@ fn build_ui(application: &gtk::Application, model: Rc<RefCell<Situation>>) {
 
     window.show_all();
 
-    gtk::timeout_add(1000 / REFRESH_RATE, move || { drawing_area.queue_draw(); glib::Continue(true) });
+    gtk::timeout_add(1000 / REFRESH_RATE, move || {
+        drawing_area.queue_draw();
+        glib::Continue(true)
+    });
 }
 
 fn main() {
@@ -270,8 +294,8 @@ fn main() {
         Body::new().with_mass(0.1).at(Coordinate{x: 0., y: -300.}).moving(EuclideanVector{dx: 0.9, dy: 0.})
     )));
 
-    let application = gtk::Application::new(Some("com.rs-kepler"), Default::default())
-        .expect("Failed to initialize GTK application");
+    let application =
+        gtk::Application::new(Some("com.rs-kepler"), Default::default()).expect("Failed to initialize GTK application");
 
     let activation_captured_model = Rc::clone(&model);
     application.connect_activate(move |app| {
