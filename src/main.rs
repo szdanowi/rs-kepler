@@ -135,6 +135,8 @@ struct Situation {
     marks: Vec<Mark>,
     updates: u64,
     zoom: f64,
+    fullscreen: bool,
+    paused: bool,
 }
 
 impl Situation {
@@ -144,6 +146,8 @@ impl Situation {
             marks: Vec::<Mark>::new(),
             updates: 0,
             zoom: 1.,
+            fullscreen: false,
+            paused: false,
         }
     }
     pub fn with(mut self, body: Body) -> Self {
@@ -155,6 +159,8 @@ impl Situation {
     }
 
     pub fn update(&mut self) {
+        if self.paused { return; }
+
         for i in 0..self.bodies.len() {
             let (head, tail) = self.bodies.split_at_mut(i);
             let (body, tail) = tail.split_at_mut(1);
@@ -245,6 +251,10 @@ fn print_debug(context: &cairo::Context, situation: &Situation) {
     print_text(context, 10., 15., &format!("{}", Local::now().format("%Y-%m-%d %H:%M:%S")));
     print_text(context, 10., 25., &format!("bodies: {}", situation.bodies.len()));
     print_text(context, 10., 35., &format!("forces: {}", situation.count_forces()));
+    print_text(context, 10., 45., &format!("iteration: {}", situation.updates));
+    print_text(context, 10., 55., &format!("zoom: {}", situation.zoom));
+    if situation.fullscreen { print_text(context, 10., 75., "Fullscreen"); }
+    if situation.paused { print_text(context, 10., 85., "Paused"); }
 }
 
 fn paint(drawing_area: &gtk::DrawingArea, context: &cairo::Context, situation: &Situation) -> gtk::Inhibit {
@@ -265,6 +275,15 @@ fn paint(drawing_area: &gtk::DrawingArea, context: &cairo::Context, situation: &
     Inhibit(false)
 }
 
+fn toggle_fullscreen(window: &gtk::ApplicationWindow, model: &mut Situation) {
+    if model.fullscreen {
+        window.unfullscreen();
+    } else {
+        window.fullscreen();
+    }
+    model.fullscreen = !model.fullscreen;
+}
+
 fn build_ui(application: &gtk::Application, model: Rc<RefCell<Situation>>) {
     let window = gtk::ApplicationWindow::new(application);
     let drawing_area = gtk::DrawingArea::new();
@@ -281,11 +300,13 @@ fn build_ui(application: &gtk::Application, model: Rc<RefCell<Situation>>) {
     window.add(&drawing_area);
 
     window.connect_key_press_event(move |window, gdk| {
+        let mut mut_model = model.borrow_mut();
         match gdk.get_keyval() {
-            keys::constants::F11 => window.fullscreen(),
-            keys::constants::F12 => window.unfullscreen(),
-            keys::constants::plus => model.borrow_mut().zoom *= 2.,
-            keys::constants::minus => model.borrow_mut().zoom /= 2.,
+            keys::constants::F11 => toggle_fullscreen(window, &mut mut_model),
+            keys::constants::plus => mut_model.zoom *= 1.1,
+            keys::constants::minus => mut_model.zoom /= 1.1,
+            keys::constants::_0 => mut_model.zoom = 1.,
+            keys::constants::space => mut_model.paused = !mut_model.paused,
             _ => (),
         }
         Inhibit(false)
