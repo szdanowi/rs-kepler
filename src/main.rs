@@ -1,5 +1,5 @@
 use chrono::prelude::*;
-use derive_more::{AddAssign, Div, Mul};
+use derive_more::{Add, AddAssign, Div, Mul};
 use gdk::keys;
 use gio::prelude::*;
 use gtk::prelude::*;
@@ -13,6 +13,7 @@ const VECTOR_MAGNIFICATION: f64 = 25.;
 const REFRESH_RATE: u32 = 50; // per second
 const UPDATE_RATE: u32 = 50; // per second
 const TRAIL_HISTORY: u32 = 2000;
+const SCROLL_STEP: f64 = 25.;
 
 #[derive(Copy, Clone)]
 struct Coordinate {
@@ -20,7 +21,7 @@ struct Coordinate {
     y: f64,
 }
 
-#[derive(Copy, Clone, AddAssign, Div, Mul)]
+#[derive(Copy, Clone, AddAssign, Div, Mul, Add)]
 struct EuclideanVector {
     dx: f64,
     dy: f64,
@@ -137,6 +138,7 @@ struct Situation {
     zoom: f64,
     fullscreen: bool,
     paused: bool,
+    translation: EuclideanVector,
 }
 
 impl Situation {
@@ -148,6 +150,7 @@ impl Situation {
             zoom: 1.,
             fullscreen: false,
             paused: false,
+            translation: EuclideanVector { dx: 0., dy: 0. },
         }
     }
     pub fn with(mut self, body: Body) -> Self {
@@ -258,14 +261,16 @@ fn print_debug(context: &cairo::Context, situation: &Situation) {
 }
 
 fn paint(drawing_area: &gtk::DrawingArea, context: &cairo::Context, situation: &Situation) -> gtk::Inhibit {
-    let max_x = f64::from(drawing_area.get_allocated_width());
-    let max_y = f64::from(drawing_area.get_allocated_height());
+    let translation = EuclideanVector {
+        dx: f64::from(drawing_area.get_allocated_width()) / 2.,
+        dy: f64::from(drawing_area.get_allocated_height()) / 2.,
+    } + situation.translation;
 
     context.set_source_rgb(0.05, 0.05, 0.05);
     context.paint();
 
     context.save();
-    context.translate(max_x / 2., max_y / 2.);
+    context.translate(translation.dx, translation.dy);
     context.scale(situation.zoom, situation.zoom);
     for body in &situation.bodies { body.paint_on(context); }
     for mark in &situation.marks { mark.paint_on(context); }
@@ -307,6 +312,10 @@ fn build_ui(application: &gtk::Application, model: Rc<RefCell<Situation>>) {
             keys::constants::minus => mut_model.zoom /= 1.1,
             keys::constants::_0 => mut_model.zoom = 1.,
             keys::constants::space => mut_model.paused = !mut_model.paused,
+            keys::constants::Left => mut_model.translation.dx += SCROLL_STEP,
+            keys::constants::Right => mut_model.translation.dx -= SCROLL_STEP,
+            keys::constants::Up => mut_model.translation.dy += SCROLL_STEP,
+            keys::constants::Down => mut_model.translation.dy -= SCROLL_STEP,
             _ => (),
         }
         Inhibit(false)
