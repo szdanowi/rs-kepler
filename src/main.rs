@@ -56,6 +56,7 @@ impl std::cmp::PartialEq<f64> for EuclideanVector {
 }
 
 struct Body {
+    name: String,
     position: Coordinate,
     mass: f64,
     radius: f64,
@@ -68,6 +69,7 @@ impl Body {
 
     pub const fn new() -> Self {
         Self {
+            name: String::new(),
             position: Coordinate { x: 0., y: 0. },
             mass: 0.,
             radius: 0.,
@@ -81,6 +83,10 @@ impl Body {
     }
     pub const fn moving(mut self, arg: EuclideanVector) -> Self {
         self.velocity = arg;
+        self
+    }
+    pub fn named(mut self, arg: &str) -> Self {
+        self.name = arg.to_string();
         self
     }
     pub fn with_mass(mut self, arg: f64) -> Self {
@@ -220,6 +226,10 @@ impl CairoPaintable for Body {
         context.arc(0., 0., self.radius, 0., PI * 2.);
         context.stroke();
 
+        context.move_to(7., 10.);
+        context.show_text(&self.name);
+        context.move_to(0., 0.);
+
         context.set_source_rgb(0., 0., 1.);
         self.velocity.paint_on(context);
 
@@ -331,13 +341,13 @@ fn build_ui(application: &gtk::Application, model: Rc<RefCell<Situation>>) {
 
 fn main() {
     let model = Rc::new(RefCell::new(Situation::new().with(
-        Body::new().with_mass(70.).at(Coordinate{x: 0., y: 0.}).moving(EuclideanVector{dx: 0., dy: 0.})
+        Body::new().with_mass(70.).at(Coordinate{x: 0., y: 0.}).moving(EuclideanVector{dx: 0., dy: 0.}).named("Imagirus*")
     ).with(
-        Body::new().with_mass(1.).at(Coordinate{x: 150., y: 0.}).moving(EuclideanVector{dx: 0., dy: 2.})
+        Body::new().with_mass(1.).at(Coordinate{x: 150., y: 0.}).moving(EuclideanVector{dx: 0., dy: 2.}).named("Imagirus I")
     ).with(
-        Body::new().with_mass(1.).at(Coordinate{x: -400., y: 0.}).moving(EuclideanVector{dx: 0., dy: 1.})
+        Body::new().with_mass(1.).at(Coordinate{x: -400., y: 0.}).moving(EuclideanVector{dx: 0., dy: 1.}).named("Imagirus II")
     ).with(
-        Body::new().with_mass(0.1).at(Coordinate{x: 0., y: -300.}).moving(EuclideanVector{dx: 0.9, dy: 0.})
+        Body::new().with_mass(0.1).at(Coordinate{x: 0., y: -300.}).moving(EuclideanVector{dx: 0.9, dy: 0.}).named("Feather")
     )));
 
     let application = gtk::Application::new(Some("com.rs-kepler"), gio::ApplicationFlags::default())
