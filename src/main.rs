@@ -1,6 +1,6 @@
 use chrono::prelude::*;
 use derive_more::{AddAssign, Div, Mul};
-use gdk::*;
+use gdk::keys;
 use gio::prelude::*;
 use gtk::prelude::*;
 use std::cell::RefCell;
@@ -32,7 +32,7 @@ impl EuclideanVector {
     }
 
     fn magnitude(&self) -> f64 {
-        (self.dx * self.dx + self.dy * self.dy).sqrt()
+        self.dx.hypot(self.dy)
     }
 
     fn versor(&self) -> Self {
@@ -65,8 +65,8 @@ struct Body {
 impl Body {
     const DENSITY: f64 = 3.;
 
-    pub fn new() -> Body {
-        Body {
+    pub const fn new() -> Self {
+        Self {
             position: Coordinate { x: 0., y: 0. },
             mass: 0.,
             radius: 0.,
@@ -74,11 +74,11 @@ impl Body {
             forces: Vec::<EuclideanVector>::new(),
         }
     }
-    pub fn at(mut self, arg: Coordinate) -> Self {
+    pub const fn at(mut self, arg: Coordinate) -> Self {
         self.position = arg;
         self
     }
-    pub fn moving(mut self, arg: EuclideanVector) -> Self {
+    pub const fn moving(mut self, arg: EuclideanVector) -> Self {
         self.velocity = arg;
         self
     }
@@ -122,7 +122,7 @@ struct Mark {
 }
 
 impl Mark {
-    fn new(at: Coordinate) -> Self {
+    const fn new(at: Coordinate) -> Self {
         Self { position: at, age: 0 }
     }
     fn update(&mut self) {
@@ -138,8 +138,8 @@ struct Situation {
 }
 
 impl Situation {
-    pub fn new() -> Situation {
-        Situation {
+    pub const fn new() -> Self {
+        Self {
             bodies: Vec::<Body>::new(),
             marks: Vec::<Mark>::new(),
             updates: 0,
@@ -235,16 +235,16 @@ impl CairoPaintable for Mark {
     }
 }
 
-fn print_text(context: &cairo::Context, x: f64, y: f64, text: String) {
+fn print_text(context: &cairo::Context, x: f64, y: f64, text: &str) {
     context.move_to(x, y);
-    context.show_text(&text);
+    context.show_text(text);
 }
 
 fn print_debug(context: &cairo::Context, situation: &Situation) {
     context.set_source_rgb(1., 1., 1.);
-    print_text(context, 10., 15., format!("{}", Local::now().format("%Y-%m-%d %H:%M:%S")));
-    print_text(context, 10., 25., format!("bodies: {}", situation.bodies.len()));
-    print_text(context, 10., 35., format!("forces: {}", situation.count_forces()));
+    print_text(context, 10., 15., &format!("{}", Local::now().format("%Y-%m-%d %H:%M:%S")));
+    print_text(context, 10., 25., &format!("bodies: {}", situation.bodies.len()));
+    print_text(context, 10., 35., &format!("forces: {}", situation.count_forces()));
 }
 
 fn paint(drawing_area: &gtk::DrawingArea, context: &cairo::Context, situation: &Situation) -> gtk::Inhibit {
@@ -280,13 +280,12 @@ fn build_ui(application: &gtk::Application, model: Rc<RefCell<Situation>>) {
     window.set_default_size(1024, 768);
     window.add(&drawing_area);
 
-    let keys_captured_model = Rc::clone(&model);
     window.connect_key_press_event(move |window, gdk| {
         match gdk.get_keyval() {
             keys::constants::F11 => window.fullscreen(),
             keys::constants::F12 => window.unfullscreen(),
-            keys::constants::plus => keys_captured_model.borrow_mut().zoom *= 2.,
-            keys::constants::minus => keys_captured_model.borrow_mut().zoom /= 2.,
+            keys::constants::plus => model.borrow_mut().zoom *= 2.,
+            keys::constants::minus => model.borrow_mut().zoom /= 2.,
             _ => (),
         }
         Inhibit(false)
@@ -311,8 +310,8 @@ fn main() {
         Body::new().with_mass(0.1).at(Coordinate{x: 0., y: -300.}).moving(EuclideanVector{dx: 0.9, dy: 0.})
     )));
 
-    let application =
-        gtk::Application::new(Some("com.rs-kepler"), Default::default()).expect("Failed to initialize GTK application");
+    let application = gtk::Application::new(Some("com.rs-kepler"), gio::ApplicationFlags::default())
+        .expect("Failed to initialize GTK application");
 
     let activation_captured_model = Rc::clone(&model);
     application.connect_activate(move |app| {
