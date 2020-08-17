@@ -48,6 +48,12 @@ impl EuclideanVector {
     }
 }
 
+impl std::fmt::Display for EuclideanVector {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
+        write!(f, "({:.4}, {:.4})", self.dx, self.dy)
+    }
+}
+
 impl std::ops::AddAssign<EuclideanVector> for Coordinate {
     fn add_assign(&mut self, delta: EuclideanVector) {
         self.x += delta.dx;
@@ -155,7 +161,7 @@ struct Situation {
     bodies: Vec<Body>,
     marks: Vec<Mark>,
     updates: u64,
-    zoom: f64,
+    zoom_exponent: f64,
     fullscreen: bool,
     paused: bool,
     translation: EuclideanVector,
@@ -168,7 +174,7 @@ impl Situation {
             bodies: Vec::<Body>::new(),
             marks: Vec::<Mark>::new(),
             updates: 0,
-            zoom: 1.,
+            zoom_exponent: 0.,
             fullscreen: false,
             paused: false,
             translation: EuclideanVector { dx: 0., dy: 0. },
@@ -216,13 +222,16 @@ impl Situation {
         result
     }
     pub fn zoom_in(&mut self) {
-        self.zoom *= 1.1;
+        self.zoom_exponent += 0.25;
     }
     pub fn zoom_out(&mut self) {
-        self.zoom /= 1.1;
+        self.zoom_exponent -= 0.25;
     }
     pub fn zoom_reset(&mut self) {
-        self.zoom = 1.;
+        self.zoom_exponent = 0.;
+    }
+    pub fn zoom(&self) -> f64 {
+        2.0_f64.powf(self.zoom_exponent)
     }
 }
 
@@ -290,9 +299,10 @@ fn print_debug(context: &cairo::Context, situation: &Situation) {
     print_text(context, 10., 25., &format!("bodies: {}", situation.bodies.len()));
     print_text(context, 10., 35., &format!("forces: {}", situation.count_forces()));
     print_text(context, 10., 45., &format!("iteration: {}", situation.updates));
-    print_text(context, 10., 55., &format!("zoom: {}", situation.zoom));
-    if situation.fullscreen { print_text(context, 10., 75., "Fullscreen"); }
-    if situation.paused { print_text(context, 10., 85., "Paused"); }
+    print_text(context, 10., 55., &format!("zoom: {}", situation.zoom_exponent));
+    print_text(context, 10., 65., &format!("center: {}", situation.translation));
+    if situation.fullscreen { print_text(context, 10., 85., "Fullscreen"); }
+    if situation.paused { print_text(context, 10., 95., "Paused"); }
 }
 
 fn viewport_translation(viewport: &gtk::DrawingArea) -> EuclideanVector {
@@ -303,15 +313,17 @@ fn viewport_translation(viewport: &gtk::DrawingArea) -> EuclideanVector {
 }
 
 fn paint(drawing_area: &gtk::DrawingArea, context: &cairo::Context, situation: &Situation) -> gtk::Inhibit {
-    let viewport_translation = viewport_translation(drawing_area);
-
     context.set_source_rgb(0.05, 0.05, 0.05);
     context.paint();
-
     context.save();
+
+    let viewport_translation = viewport_translation(drawing_area);
     context.translate(viewport_translation.dx, viewport_translation.dy);
-    context.scale(situation.zoom, situation.zoom);
+
+    let scale = situation.zoom();
+    context.scale(scale, scale);
     context.translate(situation.translation.dx, situation.translation.dy);
+
     for body in &situation.bodies { body.paint_on(context); }
     for mark in &situation.marks { mark.paint_on(context); }
     context.restore();
@@ -380,7 +392,7 @@ fn build_ui(application: &gtk::Application, model: &Rc<RefCell<Situation>>) {
             let pointer_position = Coordinate::from(gdk.get_position());
 
             let mut model = motion_captured_model.borrow_mut();
-            let delta = (pointer_position - model.drag_start) / model.zoom;
+            let delta = (pointer_position - model.drag_start) / model.zoom();
             model.translation += delta;
 
             model.drag_start = pointer_position;
