@@ -46,8 +46,19 @@ impl EuclideanVector {
         let len = self.magnitude();
         Self { dx: self.dx / len, dy: self.dy / len }
     }
+
+    fn towards(to: Coordinate) -> EuclideanVector {
+        Self { dx: to.x, dy: to.y }
+    }
 }
 
+impl std::ops::Neg for EuclideanVector {
+    type Output = EuclideanVector;
+
+    fn neg(self) -> Self {
+        Self { dx: -self.dx, dy: -self.dy }
+    }
+}
 impl std::fmt::Display for EuclideanVector {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
         write!(f, "({:.4}, {:.4})", self.dx, self.dy)
@@ -82,6 +93,7 @@ struct Body {
     radius: f64,
     velocity: EuclideanVector,
     forces: Vec<EuclideanVector>,
+    highlighted: bool,
 }
 
 impl Body {
@@ -95,6 +107,7 @@ impl Body {
             radius: 0.,
             velocity: EuclideanVector { dx: 0., dy: 0. },
             forces: Vec::<EuclideanVector>::new(),
+            highlighted: false,
         }
     }
     pub const fn at(mut self, arg: Coordinate) -> Self {
@@ -166,6 +179,7 @@ struct Situation {
     paused: bool,
     translation: EuclideanVector,
     drag_start: Coordinate,
+    tracked_body: Option<usize>,
 }
 
 impl Situation {
@@ -179,6 +193,7 @@ impl Situation {
             paused: false,
             translation: EuclideanVector { dx: 0., dy: 0. },
             drag_start: Coordinate { x: 0., y: 0. },
+            tracked_body: None,
         }
     }
     pub fn with(mut self, body: Body) -> Self {
@@ -207,6 +222,8 @@ impl Situation {
             if self.updates % (u64::from(REFRESH_RATE) / 10) == 0 {
                 self.marks.push(Mark::new(body.position));
             }
+
+            body.highlighted = self.tracked_body == Some(i);
         }
 
         for mark in &mut self.marks {
@@ -232,6 +249,18 @@ impl Situation {
     }
     pub fn zoom(&self) -> f64 {
         2.0_f64.powf(self.zoom_exponent)
+    }
+    pub fn track_next(&mut self) {
+        match self.tracked_body {
+            Some(tracked) => if self.bodies.len() > tracked + 1 { self.tracked_body = Some(tracked + 1); } else { self.tracked_body = None; },
+            None => if self.bodies.len() > 0 { self.tracked_body = Some(0); },
+        }
+    }
+    pub fn center_translation(&self) -> EuclideanVector {
+        match self.tracked_body {
+            Some(tracked) => -EuclideanVector::towards(self.bodies[tracked].position),
+            None => self.translation,
+        }
     }
 }
 
@@ -261,6 +290,7 @@ impl CairoPaintable for Body {
         context.stroke();
 
         context.move_to(7., 10.);
+        if self.highlighted { context.set_source_rgb(1., 1., 0.); }
         context.show_text(&self.name);
         context.move_to(0., 0.);
 
@@ -300,7 +330,7 @@ fn print_debug(context: &cairo::Context, situation: &Situation) {
     print_text(context, 10., 35., &format!("forces: {}", situation.count_forces()));
     print_text(context, 10., 45., &format!("iteration: {}", situation.updates));
     print_text(context, 10., 55., &format!("zoom: {}", situation.zoom_exponent));
-    print_text(context, 10., 65., &format!("center: {}", situation.translation));
+    print_text(context, 10., 65., &format!("center: {}", -situation.center_translation()));
     if situation.fullscreen { print_text(context, 10., 85., "Fullscreen"); }
     if situation.paused { print_text(context, 10., 95., "Paused"); }
 }
@@ -322,7 +352,9 @@ fn paint(drawing_area: &gtk::DrawingArea, context: &cairo::Context, situation: &
 
     let scale = situation.zoom();
     context.scale(scale, scale);
-    context.translate(situation.translation.dx, situation.translation.dy);
+
+    let translation = situation.center_translation();
+    context.translate(translation.dx, translation.dy);
 
     for body in &situation.bodies { body.paint_on(context); }
     for mark in &situation.marks { mark.paint_on(context); }
@@ -370,6 +402,7 @@ fn build_ui(application: &gtk::Application, model: &Rc<RefCell<Situation>>) {
             keys::constants::Right => mut_model.translation.dx -= SCROLL_STEP,
             keys::constants::Up => mut_model.translation.dy += SCROLL_STEP,
             keys::constants::Down => mut_model.translation.dy -= SCROLL_STEP,
+            keys::constants::Tab => mut_model.track_next(),
             _ => (),
         }
         Inhibit(false)
