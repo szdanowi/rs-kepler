@@ -330,6 +330,7 @@ fn build_ui(application: &gtk::Application, model: Rc<RefCell<Situation>>) {
 
         let mut mut_model = window_captured_model.borrow_mut();
         match pressed {
+            keys::constants::F12 => window.close(),
             keys::constants::F11 => toggle_fullscreen(window, &mut mut_model),
             keys::constants::plus => mut_model.zoom_in(),
             keys::constants::minus => mut_model.zoom_out(),
