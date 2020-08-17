@@ -279,18 +279,23 @@ fn print_debug(context: &cairo::Context, situation: &Situation) {
     if situation.paused { print_text(context, 10., 85., "Paused"); }
 }
 
+fn viewport_translation(viewport: &gtk::DrawingArea) -> EuclideanVector {
+    EuclideanVector {
+        dx: f64::from(viewport.get_allocated_width()) / 2.,
+        dy: f64::from(viewport.get_allocated_height()) / 2.,
+    }
+}
+
 fn paint(drawing_area: &gtk::DrawingArea, context: &cairo::Context, situation: &Situation) -> gtk::Inhibit {
-    let translation = EuclideanVector {
-        dx: f64::from(drawing_area.get_allocated_width()) / 2.,
-        dy: f64::from(drawing_area.get_allocated_height()) / 2.,
-    } + situation.translation;
+    let viewport_translation = viewport_translation(&drawing_area);
 
     context.set_source_rgb(0.05, 0.05, 0.05);
     context.paint();
 
     context.save();
-    context.translate(translation.dx, translation.dy);
+    context.translate(viewport_translation.dx, viewport_translation.dy);
     context.scale(situation.zoom, situation.zoom);
+    context.translate(situation.translation.dx, situation.translation.dy);
     for body in &situation.bodies { body.paint_on(context); }
     for mark in &situation.marks { mark.paint_on(context); }
     context.restore();
