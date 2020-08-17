@@ -1,5 +1,5 @@
 use chrono::prelude::*;
-use derive_more::{Add, AddAssign, Div, Mul};
+use derive_more::{Add, AddAssign, Div, Mul, Sub};
 use gdk::{keys, ScrollDirection};
 use gio::prelude::*;
 use gtk::prelude::*;
@@ -21,7 +21,13 @@ struct Coordinate {
     y: f64,
 }
 
-#[derive(Copy, Clone, AddAssign, Div, Mul, Add)]
+impl Coordinate {
+    fn from(tuple: (f64, f64)) -> Self {
+        Self { x: tuple.0, y: tuple.1 }
+    }
+}
+
+#[derive(Copy, Clone, AddAssign, Div, Mul, Add, Sub)]
 struct EuclideanVector {
     dx: f64,
     dy: f64,
@@ -46,6 +52,14 @@ impl std::ops::AddAssign<EuclideanVector> for Coordinate {
     fn add_assign(&mut self, delta: EuclideanVector) {
         self.x += delta.dx;
         self.y += delta.dy;
+    }
+}
+
+impl std::ops::Sub for Coordinate {
+    type Output = EuclideanVector;
+
+    fn sub(self, other: Self) -> EuclideanVector {
+        EuclideanVector { dx: self.x - other.x, dy: self.y - other.y }
     }
 }
 
@@ -145,6 +159,7 @@ struct Situation {
     fullscreen: bool,
     paused: bool,
     translation: EuclideanVector,
+    drag_start: Coordinate,
 }
 
 impl Situation {
@@ -157,6 +172,7 @@ impl Situation {
             fullscreen: false,
             paused: false,
             translation: EuclideanVector { dx: 0., dy: 0. },
+            drag_start: Coordinate { x: 0., y: 0. },
         }
     }
     pub fn with(mut self, body: Body) -> Self {
@@ -330,11 +346,8 @@ fn build_ui(application: &gtk::Application, model: Rc<RefCell<Situation>>) {
 
     let window_captured_model = Rc::clone(&model);
     window.connect_key_press_event(move |window, gdk| {
-        let pressed = gdk.get_keyval();
-        println!("key pressed: {:?}", pressed);
-
         let mut mut_model = window_captured_model.borrow_mut();
-        match pressed {
+        match gdk.get_keyval() {
             keys::constants::F12 => window.close(),
             keys::constants::F11 => toggle_fullscreen(window, &mut mut_model),
             keys::constants::plus => mut_model.zoom_in(),
@@ -350,14 +363,35 @@ fn build_ui(application: &gtk::Application, model: Rc<RefCell<Situation>>) {
         Inhibit(false)
     });
 
-    drawing_area.add_events(gdk::EventMask::SCROLL_MASK);
+    drawing_area.add_events(
+        gdk::EventMask::BUTTON_PRESS_MASK |
+        gdk::EventMask::SCROLL_MASK |
+        gdk::EventMask::POINTER_MOTION_MASK);
+
+    let button_press_captured_model = Rc::clone(&model);
+    drawing_area.connect_button_press_event(move |_, gdk| {
+        button_press_captured_model.borrow_mut().drag_start = Coordinate::from(gdk.get_position());
+        Inhibit(false)
+    });
+
+    let motion_captured_model = Rc::clone(&model);
+    drawing_area.connect_motion_notify_event(move |_, gdk| {
+        if gdk.get_state().contains(gdk::ModifierType::BUTTON1_MASK) {
+            let pointer_position = Coordinate::from(gdk.get_position());
+
+            let mut model = motion_captured_model.borrow_mut();
+            let delta = (pointer_position - model.drag_start) / model.zoom;
+            model.translation += delta;
+
+            model.drag_start = pointer_position;
+        }
+        Inhibit(false)
+    });
+
     let scroll_captured_model = Rc::clone(&model);
     drawing_area.connect_scroll_event(move |_, gdk| {
-        let direction = gdk.get_direction();
-        println!("scrolled! {:?}", direction);
-
         let mut mut_model = scroll_captured_model.borrow_mut();
-        match direction {
+        match gdk.get_direction() {
             ScrollDirection::Up => mut_model.zoom_in(),
             ScrollDirection::Down => mut_model.zoom_out(),
             _ => (),
