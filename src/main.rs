@@ -22,7 +22,7 @@ struct Coordinate {
 }
 
 impl Coordinate {
-    fn from(tuple: (f64, f64)) -> Self {
+    const fn from(tuple: (f64, f64)) -> Self {
         Self { x: tuple.0, y: tuple.1 }
     }
 }
@@ -303,7 +303,7 @@ fn viewport_translation(viewport: &gtk::DrawingArea) -> EuclideanVector {
 }
 
 fn paint(drawing_area: &gtk::DrawingArea, context: &cairo::Context, situation: &Situation) -> gtk::Inhibit {
-    let viewport_translation = viewport_translation(&drawing_area);
+    let viewport_translation = viewport_translation(drawing_area);
 
     context.set_source_rgb(0.05, 0.05, 0.05);
     context.paint();
@@ -329,11 +329,11 @@ fn toggle_fullscreen(window: &gtk::ApplicationWindow, model: &mut Situation) {
     model.fullscreen = !model.fullscreen;
 }
 
-fn build_ui(application: &gtk::Application, model: Rc<RefCell<Situation>>) {
+fn build_ui(application: &gtk::Application, model: &Rc<RefCell<Situation>>) {
     let window = gtk::ApplicationWindow::new(application);
     let drawing_area = gtk::DrawingArea::new();
 
-    let draw_captured_model = Rc::clone(&model);
+    let draw_captured_model = Rc::clone(model);
     drawing_area.connect_draw(move |drawing_area, cairo_context| {
         paint(drawing_area, cairo_context, &draw_captured_model.borrow())
     });
@@ -344,7 +344,7 @@ fn build_ui(application: &gtk::Application, model: Rc<RefCell<Situation>>) {
     window.set_default_size(1024, 768);
     window.add(&drawing_area);
 
-    let window_captured_model = Rc::clone(&model);
+    let window_captured_model = Rc::clone(model);
     window.connect_key_press_event(move |window, gdk| {
         let mut mut_model = window_captured_model.borrow_mut();
         match gdk.get_keyval() {
@@ -368,13 +368,13 @@ fn build_ui(application: &gtk::Application, model: Rc<RefCell<Situation>>) {
         gdk::EventMask::SCROLL_MASK |
         gdk::EventMask::POINTER_MOTION_MASK);
 
-    let button_press_captured_model = Rc::clone(&model);
+    let button_press_captured_model = Rc::clone(model);
     drawing_area.connect_button_press_event(move |_, gdk| {
         button_press_captured_model.borrow_mut().drag_start = Coordinate::from(gdk.get_position());
         Inhibit(false)
     });
 
-    let motion_captured_model = Rc::clone(&model);
+    let motion_captured_model = Rc::clone(model);
     drawing_area.connect_motion_notify_event(move |_, gdk| {
         if gdk.get_state().contains(gdk::ModifierType::BUTTON1_MASK) {
             let pointer_position = Coordinate::from(gdk.get_position());
@@ -388,7 +388,7 @@ fn build_ui(application: &gtk::Application, model: Rc<RefCell<Situation>>) {
         Inhibit(false)
     });
 
-    let scroll_captured_model = Rc::clone(&model);
+    let scroll_captured_model = Rc::clone(model);
     drawing_area.connect_scroll_event(move |_, gdk| {
         let mut mut_model = scroll_captured_model.borrow_mut();
         match gdk.get_direction() {
@@ -423,7 +423,7 @@ fn main() {
 
     let activation_captured_model = Rc::clone(&model);
     application.connect_activate(move |app| {
-        build_ui(app, Rc::clone(&activation_captured_model));
+        build_ui(app, &Rc::clone(&activation_captured_model));
 
         let timeout_captured_model = activation_captured_model.clone();
         gtk::timeout_add(1000 / UPDATE_RATE, move || {
