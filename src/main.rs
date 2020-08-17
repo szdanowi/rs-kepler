@@ -1,6 +1,6 @@
 use chrono::prelude::*;
 use derive_more::{Add, AddAssign, Div, Mul};
-use gdk::keys;
+use gdk::{keys, ScrollDirection};
 use gio::prelude::*;
 use gtk::prelude::*;
 use std::cell::RefCell;
@@ -199,6 +199,15 @@ impl Situation {
         for body in &self.bodies { result += body.forces.len(); }
         result
     }
+    pub fn zoom_in(&mut self) {
+        self.zoom *= 1.1;
+    }
+    pub fn zoom_out(&mut self) {
+        self.zoom /= 1.1;
+    }
+    pub fn zoom_reset(&mut self) {
+        self.zoom = 1.;
+    }
 }
 
 // ---
@@ -314,18 +323,37 @@ fn build_ui(application: &gtk::Application, model: Rc<RefCell<Situation>>) {
     window.set_default_size(1024, 768);
     window.add(&drawing_area);
 
+    let window_captured_model = Rc::clone(&model);
     window.connect_key_press_event(move |window, gdk| {
-        let mut mut_model = model.borrow_mut();
-        match gdk.get_keyval() {
+        let pressed = gdk.get_keyval();
+        println!("key pressed: {:?}", pressed);
+
+        let mut mut_model = window_captured_model.borrow_mut();
+        match pressed {
             keys::constants::F11 => toggle_fullscreen(window, &mut mut_model),
-            keys::constants::plus => mut_model.zoom *= 1.1,
-            keys::constants::minus => mut_model.zoom /= 1.1,
-            keys::constants::_0 => mut_model.zoom = 1.,
+            keys::constants::plus => mut_model.zoom_in(),
+            keys::constants::minus => mut_model.zoom_out(),
+            keys::constants::_0 => mut_model.zoom_reset(),
             keys::constants::space => mut_model.paused = !mut_model.paused,
             keys::constants::Left => mut_model.translation.dx += SCROLL_STEP,
             keys::constants::Right => mut_model.translation.dx -= SCROLL_STEP,
             keys::constants::Up => mut_model.translation.dy += SCROLL_STEP,
             keys::constants::Down => mut_model.translation.dy -= SCROLL_STEP,
+            _ => (),
+        }
+        Inhibit(false)
+    });
+
+    drawing_area.add_events(gdk::EventMask::SCROLL_MASK);
+    let scroll_captured_model = Rc::clone(&model);
+    drawing_area.connect_scroll_event(move |_, gdk| {
+        let direction = gdk.get_direction();
+        println!("scrolled! {:?}", direction);
+
+        let mut mut_model = scroll_captured_model.borrow_mut();
+        match direction {
+            ScrollDirection::Up => mut_model.zoom_in(),
+            ScrollDirection::Down => mut_model.zoom_out(),
             _ => (),
         }
         Inhibit(false)
