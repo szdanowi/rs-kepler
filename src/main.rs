@@ -395,6 +395,7 @@ fn build_ui(application: &gtk::Application, model: &Rc<RefCell<Situation>>) {
     window.connect_key_press_event(move |window, gdk| {
         let mut mut_model = window_captured_model.borrow_mut();
         match gdk.get_keyval() {
+            keys::constants::Escape => window.close(),
             keys::constants::F12 => window.close(),
             keys::constants::F11 => toggle_fullscreen(window, &mut mut_model),
             keys::constants::plus => mut_model.zoom_in(),
