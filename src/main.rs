@@ -384,24 +384,34 @@ fn toggle_fullscreen(window: &gtk::ApplicationWindow, model: &mut Situation) {
     model.fullscreen = !model.fullscreen;
 }
 
+macro_rules! with_clone_of {
+    ($object: ident, $expression: expr) => {{
+        let $object = $object.clone();
+        $expression
+    }};
+}
+
 fn build_ui(application: &gtk::Application, model: &Rc<RefCell<Situation>>) {
-    let window = gtk::ApplicationWindow::new(application);
     let drawing_area = gtk::DrawingArea::new();
+    drawing_area.add_events(
+        gdk::EventMask::BUTTON_PRESS_MASK |
+        gdk::EventMask::SCROLL_MASK |
+        gdk::EventMask::POINTER_MOTION_MASK);
 
-    let draw_captured_model = Rc::clone(model);
-    drawing_area.connect_draw(move |drawing_area, cairo_context| {
-        paint(drawing_area, cairo_context, &draw_captured_model.borrow())
-    });
+    with_clone_of!(model, drawing_area.connect_draw(move |drawing_area, cairo_context| {
+        paint(drawing_area, cairo_context, &model.borrow())
+    }));
 
+    let window = gtk::ApplicationWindow::new(application);
     window.set_title("rs-kepler");
     window.set_border_width(0);
     window.set_position(gtk::WindowPosition::Center);
     window.set_default_size(1024, 768);
     window.add(&drawing_area);
+    window.show_all();
 
-    let window_captured_model = Rc::clone(model);
-    window.connect_key_press_event(move |window, gdk| {
-        let mut mut_model = window_captured_model.borrow_mut();
+    with_clone_of!(model, window.connect_key_press_event(move |window, gdk| {
+        let mut mut_model = model.borrow_mut();
         match gdk.get_keyval() {
             keys::constants::Escape => window.close(),
             keys::constants::F12 => window.close(),
@@ -418,45 +428,34 @@ fn build_ui(application: &gtk::Application, model: &Rc<RefCell<Situation>>) {
             _ => (),
         }
         Inhibit(false)
-    });
+    }));
 
-    drawing_area.add_events(
-        gdk::EventMask::BUTTON_PRESS_MASK |
-        gdk::EventMask::SCROLL_MASK |
-        gdk::EventMask::POINTER_MOTION_MASK);
-
-    let button_press_captured_model = model.clone();
-    drawing_area.connect_button_press_event(move |_, gdk| {
-        button_press_captured_model.borrow_mut().drag_started(Coordinate::from(gdk.get_position()));
+    with_clone_of!(model, drawing_area.connect_button_press_event(move |_, gdk| {
+        model.borrow_mut().drag_started(Coordinate::from(gdk.get_position()));
         Inhibit(false)
-    });
+    }));
 
-    let motion_captured_model = model.clone();
-    drawing_area.connect_motion_notify_event(move |_, gdk| {
+    with_clone_of!(model, drawing_area.connect_motion_notify_event(move |_, gdk| {
         if gdk.get_state().contains(gdk::ModifierType::BUTTON1_MASK) {
-            motion_captured_model.borrow_mut().dragging_to(Coordinate::from(gdk.get_position()));
+            model.borrow_mut().dragging_to(Coordinate::from(gdk.get_position()));
         }
         Inhibit(false)
-    });
+    }));
 
-    let scroll_captured_model = Rc::clone(model);
-    drawing_area.connect_scroll_event(move |_, gdk| {
-        let mut mut_model = scroll_captured_model.borrow_mut();
+    with_clone_of!(model, drawing_area.connect_scroll_event(move |_, gdk| {
+        let mut mut_model = model.borrow_mut();
         match gdk.get_direction() {
             ScrollDirection::Up => mut_model.zoom_in(),
             ScrollDirection::Down => mut_model.zoom_out(),
             _ => (),
         }
         Inhibit(false)
-    });
+    }));
 
-    window.show_all();
-
-    let timeout_captured_model = model.clone();
-    gtk::timeout_add(1000 / UPDATE_RATE, move || {
-        timeout_captured_model.borrow_mut().update();
+    with_clone_of!(model, gtk::timeout_add(1000 / UPDATE_RATE, move || {
+        model.borrow_mut().update();
         glib::Continue(true)
-    });
+    }));
 
     gtk::timeout_add(1000 / REFRESH_RATE, move || {
         drawing_area.queue_draw();
