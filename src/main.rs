@@ -423,7 +423,7 @@ fn build_ui(application: &gtk::Application, model: &Rc<RefCell<Situation>>) {
         Inhibit(false)
     });
 
-    let motion_captured_model = Rc::clone(model);
+    let motion_captured_model = model.clone();
     drawing_area.connect_motion_notify_event(move |_, gdk| {
         if gdk.get_state().contains(gdk::ModifierType::BUTTON1_MASK) {
             let pointer_position = Coordinate::from(gdk.get_position());
@@ -450,14 +450,20 @@ fn build_ui(application: &gtk::Application, model: &Rc<RefCell<Situation>>) {
 
     window.show_all();
 
+    let timeout_captured_model = model.clone();
+    gtk::timeout_add(1000 / UPDATE_RATE, move || {
+        timeout_captured_model.borrow_mut().update();
+        glib::Continue(true)
+    });
+
     gtk::timeout_add(1000 / REFRESH_RATE, move || {
         drawing_area.queue_draw();
         glib::Continue(true)
     });
 }
 
-fn main() {
-    let model = Rc::new(RefCell::new(Situation::new().with(
+fn build_situation() -> Situation {
+    Situation::new().with(
         Body::new().with_mass(70.).at(Coordinate{x: 0., y: 0.}).moving(EuclideanVector{dx: 0., dy: 0.}).named("Imagirus*")
     ).with(
         Body::new().with_mass(1.).at(Coordinate{x: 150., y: 0.}).moving(EuclideanVector{dx: 0., dy: 2.}).named("Imagirus I")
@@ -465,21 +471,15 @@ fn main() {
         Body::new().with_mass(1.).at(Coordinate{x: -400., y: 0.}).moving(EuclideanVector{dx: 0., dy: 1.}).named("Imagirus II")
     ).with(
         Body::new().with_mass(0.1).at(Coordinate{x: 0., y: -300.}).moving(EuclideanVector{dx: 0.9, dy: 0.}).named("Feather")
-    )));
+    )
+}
 
+fn main() {
     let application = gtk::Application::new(Some("com.rs-kepler"), gio::ApplicationFlags::default())
         .expect("Failed to initialize GTK application");
 
-    let activation_captured_model = Rc::clone(&model);
-    application.connect_activate(move |app| {
-        build_ui(app, &Rc::clone(&activation_captured_model));
+    let model = Rc::new(RefCell::new(build_situation()));
 
-        let timeout_captured_model = activation_captured_model.clone();
-        gtk::timeout_add(1000 / UPDATE_RATE, move || {
-            timeout_captured_model.borrow_mut().update();
-            glib::Continue(true)
-        });
-    });
-
+    application.connect_activate(move |app| { build_ui(app, &model); });
     application.run(&args().collect::<Vec<_>>());
 }
