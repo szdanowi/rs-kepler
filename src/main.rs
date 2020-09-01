@@ -256,6 +256,9 @@ impl Situation {
             None => if self.bodies.len() > 0 { self.tracked_body = Some(0); },
         }
     }
+    pub fn toggle_pause(&mut self) {
+        self.paused = !self.paused
+    }
     pub fn center_translation(&self) -> EuclideanVector {
         match self.tracked_body {
             Some(tracked) => -EuclideanVector::towards(self.bodies[tracked].position),
@@ -397,7 +400,7 @@ fn build_ui(application: &gtk::Application, model: &Rc<RefCell<Situation>>) {
             keys::constants::plus => mut_model.zoom_in(),
             keys::constants::minus => mut_model.zoom_out(),
             keys::constants::_0 => mut_model.zoom_reset(),
-            keys::constants::space => mut_model.paused = !mut_model.paused,
+            keys::constants::space => mut_model.toggle_pause(),
             keys::constants::Left => mut_model.translation.dx += SCROLL_STEP,
             keys::constants::Right => mut_model.translation.dx -= SCROLL_STEP,
             keys::constants::Up => mut_model.translation.dy += SCROLL_STEP,
