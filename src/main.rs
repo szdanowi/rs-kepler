@@ -259,6 +259,14 @@ impl Situation {
     pub fn toggle_pause(&mut self) {
         self.paused = !self.paused
     }
+    pub fn drag_started(&mut self, window_position: Coordinate) {
+        self.drag_start = window_position;
+    }
+    pub fn dragging_to(&mut self, window_position: Coordinate) {
+        let delta = (window_position - self.drag_start) / self.zoom();
+        self.translation += delta;
+        self.drag_start = window_position;
+    }
     pub fn center_translation(&self) -> EuclideanVector {
         match self.tracked_body {
             Some(tracked) => -EuclideanVector::towards(self.bodies[tracked].position),
@@ -417,22 +425,16 @@ fn build_ui(application: &gtk::Application, model: &Rc<RefCell<Situation>>) {
         gdk::EventMask::SCROLL_MASK |
         gdk::EventMask::POINTER_MOTION_MASK);
 
-    let button_press_captured_model = Rc::clone(model);
+    let button_press_captured_model = model.clone();
     drawing_area.connect_button_press_event(move |_, gdk| {
-        button_press_captured_model.borrow_mut().drag_start = Coordinate::from(gdk.get_position());
+        button_press_captured_model.borrow_mut().drag_started(Coordinate::from(gdk.get_position()));
         Inhibit(false)
     });
 
     let motion_captured_model = model.clone();
     drawing_area.connect_motion_notify_event(move |_, gdk| {
         if gdk.get_state().contains(gdk::ModifierType::BUTTON1_MASK) {
-            let pointer_position = Coordinate::from(gdk.get_position());
-
-            let mut model = motion_captured_model.borrow_mut();
-            let delta = (pointer_position - model.drag_start) / model.zoom();
-            model.translation += delta;
-
-            model.drag_start = pointer_position;
+            motion_captured_model.borrow_mut().dragging_to(Coordinate::from(gdk.get_position()));
         }
         Inhibit(false)
     });
