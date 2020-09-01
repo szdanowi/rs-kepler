@@ -253,7 +253,7 @@ impl Situation {
     pub fn track_next(&mut self) {
         match self.tracked_body {
             Some(tracked) => if self.bodies.len() > tracked + 1 { self.tracked_body = Some(tracked + 1); } else { self.tracked_body = None; },
-            None => if self.bodies.len() > 0 { self.tracked_body = Some(0); },
+            None => if !self.bodies.is_empty() { self.tracked_body = Some(0); },
         }
     }
     pub fn toggle_pause(&mut self) {
