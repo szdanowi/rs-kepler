@@ -384,6 +384,16 @@ fn toggle_fullscreen(window: &gtk::ApplicationWindow, model: &mut Situation) {
     model.fullscreen = !model.fullscreen;
 }
 
+const DEFAULT_CONTEXT: Option<&glib::MainContext> = None;
+
+enum Event {
+    UpdateModel,
+    KeyPressed(gdk::keys::Key),
+    Scrolling(gdk::ScrollDirection),
+    MousePressed(Coordinate),
+    MouseDragged(Coordinate),
+}
+
 macro_rules! with_clone_of {
     ($object: ident, $expression: expr) => {{
         let $object = $object.clone();
@@ -391,7 +401,7 @@ macro_rules! with_clone_of {
     }};
 }
 
-fn build_ui(application: &gtk::Application, model: &Rc<RefCell<Situation>>) {
+fn build_ui(application: &gtk::Application, model: Rc<RefCell<Situation>>) {
     let drawing_area = gtk::DrawingArea::new();
     drawing_area.add_events(
         gdk::EventMask::BUTTON_PRESS_MASK |
@@ -410,55 +420,62 @@ fn build_ui(application: &gtk::Application, model: &Rc<RefCell<Situation>>) {
     window.add(&drawing_area);
     window.show_all();
 
-    with_clone_of!(model, window.connect_key_press_event(move |window, gdk| {
-        let mut mut_model = model.borrow_mut();
-        match gdk.get_keyval() {
-            keys::constants::Escape => window.close(),
-            keys::constants::F12 => window.close(),
-            keys::constants::F11 => toggle_fullscreen(window, &mut mut_model),
-            keys::constants::plus => mut_model.zoom_in(),
-            keys::constants::minus => mut_model.zoom_out(),
-            keys::constants::_0 => mut_model.zoom_reset(),
-            keys::constants::space => mut_model.toggle_pause(),
-            keys::constants::Left => mut_model.translation.dx += SCROLL_STEP,
-            keys::constants::Right => mut_model.translation.dx -= SCROLL_STEP,
-            keys::constants::Up => mut_model.translation.dy += SCROLL_STEP,
-            keys::constants::Down => mut_model.translation.dy -= SCROLL_STEP,
-            keys::constants::Tab => mut_model.track_next(),
-            _ => (),
-        }
+    let (event_sender, event_receiver) = glib::MainContext::channel(glib::PRIORITY_DEFAULT);
+
+    with_clone_of!(event_sender, window.connect_key_press_event(move |_, gdk| {
+        event_sender.send(Event::KeyPressed(gdk.get_keyval())).expect("Failed to raise KeyPressed event");
         Inhibit(false)
     }));
 
-    with_clone_of!(model, drawing_area.connect_button_press_event(move |_, gdk| {
-        model.borrow_mut().drag_started(Coordinate::from(gdk.get_position()));
+    with_clone_of!(event_sender, drawing_area.connect_button_press_event(move |_, gdk| {
+        event_sender.send(Event::MousePressed(Coordinate::from(gdk.get_position()))).expect("Failed to raise MousePressed event");
         Inhibit(false)
     }));
 
-    with_clone_of!(model, drawing_area.connect_motion_notify_event(move |_, gdk| {
+    with_clone_of!(event_sender, drawing_area.connect_motion_notify_event(move |_, gdk| {
         if gdk.get_state().contains(gdk::ModifierType::BUTTON1_MASK) {
-            model.borrow_mut().dragging_to(Coordinate::from(gdk.get_position()));
+            event_sender.send(Event::MouseDragged(Coordinate::from(gdk.get_position()))).expect("Failed to raise MouseDragged event");
         }
         Inhibit(false)
     }));
 
-    with_clone_of!(model, drawing_area.connect_scroll_event(move |_, gdk| {
-        let mut mut_model = model.borrow_mut();
-        match gdk.get_direction() {
-            ScrollDirection::Up => mut_model.zoom_in(),
-            ScrollDirection::Down => mut_model.zoom_out(),
-            _ => (),
-        }
+    with_clone_of!(event_sender, drawing_area.connect_scroll_event(move |_, gdk| {
+        event_sender.send(Event::Scrolling(gdk.get_direction())).expect("Failed to raise Scrolling event");
         Inhibit(false)
     }));
 
-    with_clone_of!(model, gtk::timeout_add(1000 / UPDATE_RATE, move || {
-        model.borrow_mut().update();
+    with_clone_of!(event_sender, gtk::timeout_add(1000 / UPDATE_RATE, move || {
+        event_sender.send(Event::UpdateModel).expect("Failed to raise UpdateModel event");
         glib::Continue(true)
     }));
 
     gtk::timeout_add(1000 / REFRESH_RATE, move || {
         drawing_area.queue_draw();
+        glib::Continue(true)
+    });
+
+    event_receiver.attach(DEFAULT_CONTEXT, move |event| {
+        let mut model = model.borrow_mut();
+        match event {
+            Event::UpdateModel => model.update(),
+            Event::KeyPressed(keys::constants::Escape) => window.close(),
+            Event::KeyPressed(keys::constants::F12)    => window.close(),
+            Event::KeyPressed(keys::constants::F11)    => toggle_fullscreen(&window, &mut model),
+            Event::KeyPressed(keys::constants::plus)   => model.zoom_in(),
+            Event::KeyPressed(keys::constants::minus)  => model.zoom_out(),
+            Event::KeyPressed(keys::constants::_0)     => model.zoom_reset(),
+            Event::KeyPressed(keys::constants::space)  => model.toggle_pause(),
+            Event::KeyPressed(keys::constants::Left)   => model.translation.dx += SCROLL_STEP,
+            Event::KeyPressed(keys::constants::Right)  => model.translation.dx -= SCROLL_STEP,
+            Event::KeyPressed(keys::constants::Up)     => model.translation.dy += SCROLL_STEP,
+            Event::KeyPressed(keys::constants::Down)   => model.translation.dy -= SCROLL_STEP,
+            Event::KeyPressed(keys::constants::Tab)    => model.track_next(),
+            Event::Scrolling(ScrollDirection::Down)    => model.zoom_out(),
+            Event::Scrolling(ScrollDirection::Up)      => model.zoom_in(),
+            Event::MousePressed(coordinate)            => model.drag_started(coordinate),
+            Event::MouseDragged(coordinate)            => model.dragging_to(coordinate),
+            _ => (),
+        };
         glib::Continue(true)
     });
 }
@@ -479,8 +496,6 @@ fn main() {
     let application = gtk::Application::new(Some("com.rs-kepler"), gio::ApplicationFlags::default())
         .expect("Failed to initialize GTK application");
 
-    let model = Rc::new(RefCell::new(build_situation()));
-
-    application.connect_activate(move |app| { build_ui(app, &model); });
+    application.connect_activate(move |app| { build_ui(app, Rc::new(RefCell::new(build_situation()))); });
     application.run(&args().collect::<Vec<_>>());
 }
