@@ -8,7 +8,7 @@ edition = "2018"
 
 [dependencies]
 cairo-rs = { version = "0.9.1", default_features = false }
-gdk = { version = "0.13.0", default_features = false }
+gdk = { version = "0.13.0", default_features = false, features = ["v3_22"] }
 gtk = { version = "0.9.1", default_features = false }
 gio = { version = "0.9.0", default_features = false }
 glib = { version = "0.10.1", default_features = false }

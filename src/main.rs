@@ -1,12 +1,11 @@
 use chrono::prelude::*;
 use derive_more::{Add, AddAssign, Div, Mul, Sub};
-use gdk::{keys, ScrollDirection};
+use gdk::{keys, ScrollDirection, WindowExt};
 use gio::prelude::*;
 use gtk::prelude::*;
-use std::cell::RefCell;
 use std::env::args;
 use std::f64::consts::PI;
-use std::rc::Rc;
+use cairo::{Region, RectangleInt};
 
 const GRAVITATIONAL_CONSTANT: f64 = 10.;
 const VECTOR_MAGNIFICATION: f64 = 25.;
@@ -353,7 +352,7 @@ fn viewport_translation(viewport: &gtk::DrawingArea) -> EuclideanVector {
     }
 }
 
-fn paint(drawing_area: &gtk::DrawingArea, context: &cairo::Context, situation: &Situation) -> gtk::Inhibit {
+fn paint(drawing_area: &gtk::DrawingArea, context: &cairo::Context, situation: &Situation) {
     context.set_source_rgb(0.05, 0.05, 0.05);
     context.paint();
     context.save();
@@ -372,7 +371,6 @@ fn paint(drawing_area: &gtk::DrawingArea, context: &cairo::Context, situation: &
     context.restore();
 
     print_debug(context, situation);
-    Inhibit(false)
 }
 
 fn toggle_fullscreen(window: &gtk::ApplicationWindow, model: &mut Situation) {
@@ -388,6 +386,7 @@ const DEFAULT_CONTEXT: Option<&glib::MainContext> = None;
 
 enum Event {
     UpdateModel,
+    Draw,
     KeyPressed(gdk::keys::Key),
     Scrolling(gdk::ScrollDirection),
     MousePressed(Coordinate),
@@ -401,16 +400,12 @@ macro_rules! with_clone_of {
     }};
 }
 
-fn build_ui(application: &gtk::Application, model: Rc<RefCell<Situation>>) {
+fn build_ui(application: &gtk::Application, mut model: Situation) {
     let drawing_area = gtk::DrawingArea::new();
     drawing_area.add_events(
         gdk::EventMask::BUTTON_PRESS_MASK |
         gdk::EventMask::SCROLL_MASK |
         gdk::EventMask::POINTER_MOTION_MASK);
-
-    with_clone_of!(model, drawing_area.connect_draw(move |drawing_area, cairo_context| {
-        paint(drawing_area, cairo_context, &model.borrow())
-    }));
 
     let window = gtk::ApplicationWindow::new(application);
     window.set_title("rs-kepler");
@@ -449,15 +444,23 @@ fn build_ui(application: &gtk::Application, model: Rc<RefCell<Situation>>) {
         glib::Continue(true)
     }));
 
-    gtk::timeout_add(1000 / REFRESH_RATE, move || {
-        drawing_area.queue_draw();
+    with_clone_of!(event_sender, gtk::timeout_add(1000 / REFRESH_RATE, move || {
+        event_sender.send(Event::Draw).expect("Failed to raise Draw event");
         glib::Continue(true)
-    });
+    }));
 
     event_receiver.attach(DEFAULT_CONTEXT, move |event| {
-        let mut model = model.borrow_mut();
         match event {
             Event::UpdateModel => model.update(),
+            Event::Draw => {
+                let area = RectangleInt { x: 0, y: 0, width: window.get_allocated_width(), height: window.get_allocated_height() };
+                let region = Region::create_rectangle(&area);
+                let window = drawing_area.get_window().unwrap();
+                let drawing_context = window.begin_draw_frame(&region).unwrap();
+                let context = drawing_context.get_cairo_context().unwrap();
+                paint(&drawing_area, &context, &model);
+                window.end_draw_frame(&drawing_context);
+            },
             Event::KeyPressed(keys::constants::Escape) => window.close(),
             Event::KeyPressed(keys::constants::F12)    => window.close(),
             Event::KeyPressed(keys::constants::F11)    => toggle_fullscreen(&window, &mut model),
@@ -496,6 +499,6 @@ fn main() {
     let application = gtk::Application::new(Some("com.rs-kepler"), gio::ApplicationFlags::default())
         .expect("Failed to initialize GTK application");
 
-    application.connect_activate(move |app| { build_ui(app, Rc::new(RefCell::new(build_situation()))); });
+    application.connect_activate(move |app| { build_ui(app, build_situation()); });
     application.run(&args().collect::<Vec<_>>());
 }
