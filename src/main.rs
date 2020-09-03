@@ -1,16 +1,18 @@
 mod maths;
+mod maths_tests;
 mod physics;
+mod physics_tests;
 
 use chrono::prelude::*;
 use gdk::{keys, ScrollDirection};
 use gio::prelude::*;
 use gtk::prelude::*;
+use maths::{Coordinate, EuclideanVector};
+use physics::Body;
 use std::cell::RefCell;
 use std::env::args;
 use std::f64::consts::PI;
 use std::rc::Rc;
-use maths::{Coordinate, EuclideanVector};
-use physics::Body;
 
 const VECTOR_MAGNIFICATION: f64 = 25.;
 const REFRESH_RATE: u32 = 50; // per second

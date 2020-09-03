@@ -12,7 +12,7 @@ impl Coordinate {
     }
 }
 
-#[derive(Copy, Clone, AddAssign, Div, Mul, Add, Sub)]
+#[derive(Copy, Clone, AddAssign, Debug, Div, Mul, Add, Sub)]
 pub struct EuclideanVector {
     pub dx: f64,
     pub dy: f64,
@@ -72,3 +72,8 @@ impl std::cmp::PartialEq<f64> for EuclideanVector {
     }
 }
 
+impl std::cmp::PartialEq for EuclideanVector {
+    fn eq(&self, other: &Self) -> bool {
+        self.dx == other.dx && self.dy == other.dy
+    }
+}
