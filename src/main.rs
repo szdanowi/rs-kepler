@@ -1,5 +1,7 @@
+mod maths;
+mod physics;
+
 use chrono::prelude::*;
-use derive_more::{Add, AddAssign, Div, Mul, Sub};
 use gdk::{keys, ScrollDirection};
 use gio::prelude::*;
 use gtk::prelude::*;
@@ -7,154 +9,14 @@ use std::cell::RefCell;
 use std::env::args;
 use std::f64::consts::PI;
 use std::rc::Rc;
+use maths::{Coordinate, EuclideanVector};
+use physics::Body;
 
-const GRAVITATIONAL_CONSTANT: f64 = 10.;
 const VECTOR_MAGNIFICATION: f64 = 25.;
 const REFRESH_RATE: u32 = 50; // per second
 const UPDATE_RATE: u32 = 50; // per second
 const TRAIL_HISTORY: u32 = 2000;
 const SCROLL_STEP: f64 = 25.;
-
-#[derive(Copy, Clone)]
-struct Coordinate {
-    x: f64,
-    y: f64,
-}
-
-impl Coordinate {
-    const fn from(tuple: (f64, f64)) -> Self {
-        Self { x: tuple.0, y: tuple.1 }
-    }
-}
-
-#[derive(Copy, Clone, AddAssign, Div, Mul, Add, Sub)]
-struct EuclideanVector {
-    dx: f64,
-    dy: f64,
-}
-
-impl EuclideanVector {
-    fn between(from: Coordinate, to: Coordinate) -> Self {
-        Self { dx: to.x - from.x, dy: to.y - from.y }
-    }
-
-    fn magnitude(&self) -> f64 {
-        self.dx.hypot(self.dy)
-    }
-
-    fn versor(&self) -> Self {
-        let len = self.magnitude();
-        Self { dx: self.dx / len, dy: self.dy / len }
-    }
-
-    fn towards(to: Coordinate) -> EuclideanVector {
-        Self { dx: to.x, dy: to.y }
-    }
-}
-
-impl std::ops::Neg for EuclideanVector {
-    type Output = EuclideanVector;
-
-    fn neg(self) -> Self {
-        Self { dx: -self.dx, dy: -self.dy }
-    }
-}
-impl std::fmt::Display for EuclideanVector {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
-        write!(f, "({:.4}, {:.4})", self.dx, self.dy)
-    }
-}
-
-impl std::ops::AddAssign<EuclideanVector> for Coordinate {
-    fn add_assign(&mut self, delta: EuclideanVector) {
-        self.x += delta.dx;
-        self.y += delta.dy;
-    }
-}
-
-impl std::ops::Sub for Coordinate {
-    type Output = EuclideanVector;
-
-    fn sub(self, other: Self) -> EuclideanVector {
-        EuclideanVector { dx: self.x - other.x, dy: self.y - other.y }
-    }
-}
-
-impl std::cmp::PartialEq<f64> for EuclideanVector {
-    fn eq(&self, other: &f64) -> bool {
-        self.magnitude() == *other
-    }
-}
-
-struct Body {
-    name: String,
-    position: Coordinate,
-    mass: f64,
-    radius: f64,
-    velocity: EuclideanVector,
-    forces: Vec<EuclideanVector>,
-    highlighted: bool,
-}
-
-impl Body {
-    const DENSITY: f64 = 3.;
-
-    pub const fn new() -> Self {
-        Self {
-            name: String::new(),
-            position: Coordinate { x: 0., y: 0. },
-            mass: 0.,
-            radius: 0.,
-            velocity: EuclideanVector { dx: 0., dy: 0. },
-            forces: Vec::<EuclideanVector>::new(),
-            highlighted: false,
-        }
-    }
-    pub const fn at(mut self, arg: Coordinate) -> Self {
-        self.position = arg;
-        self
-    }
-    pub const fn moving(mut self, arg: EuclideanVector) -> Self {
-        self.velocity = arg;
-        self
-    }
-    pub fn named(mut self, arg: &str) -> Self {
-        self.name = arg.to_string();
-        self
-    }
-    pub fn with_mass(mut self, arg: f64) -> Self {
-        self.mass = arg;
-        let volume = self.mass / Self::DENSITY;
-        self.radius = ((3. / (4. * PI)) * volume).powf(0.33);
-        self
-    }
-
-    pub fn update(&mut self) {
-        self.position += self.velocity;
-
-        for force in &self.forces {
-            let acceleration = *force / self.mass;
-            self.velocity += acceleration; // * 1 unit of time
-        }
-    }
-
-    pub fn pull_from(&self, other: &Self) -> EuclideanVector {
-        let joining_vector = EuclideanVector::between(self.position, other.position);
-        let distance = joining_vector.magnitude();
-
-        joining_vector.versor() * ((self.mass * other.mass) / (distance * distance)) * GRAVITATIONAL_CONSTANT
-    }
-
-    pub fn add_pull_from(&mut self, other: &Self) {
-        self.forces.push(self.pull_from(other));
-    }
-}
-
-impl std::cmp::PartialEq for Body {
-    fn eq(&self, other: &Self) -> bool {
-        self == other
-    }
-}
 
 struct Mark {
     position: Coordinate,
