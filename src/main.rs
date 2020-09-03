@@ -1,11 +1,11 @@
 use chrono::prelude::*;
 use derive_more::{Add, AddAssign, Div, Mul, Sub};
-use gdk::{keys, ScrollDirection, WindowExt};
+use gdk::{keys, ScrollDirection};
 use gio::prelude::*;
 use gtk::prelude::*;
 use std::env::args;
 use std::f64::consts::PI;
-use cairo::{Region, RectangleInt};
+use gdk::prelude::GdkContextExt;
 
 const GRAVITATIONAL_CONSTANT: f64 = 10.;
 const VECTOR_MAGNIFICATION: f64 = 25.;
@@ -453,13 +453,8 @@ fn build_ui(application: &gtk::Application, mut model: Situation) {
         match event {
             Event::UpdateModel => model.update(),
             Event::Draw => {
-                let area = RectangleInt { x: 0, y: 0, width: window.get_allocated_width(), height: window.get_allocated_height() };
-                let region = Region::create_rectangle(&area);
-                let window = drawing_area.get_window().unwrap();
-                let drawing_context = window.begin_draw_frame(&region).unwrap();
-                let context = drawing_context.get_cairo_context().unwrap();
+                let context = cairo::Context::create_from_window(&drawing_area.get_window().unwrap());
                 paint(&drawing_area, &context, &model);
-                window.end_draw_frame(&drawing_context);
             },
             Event::KeyPressed(keys::constants::Escape) => window.close(),
             Event::KeyPressed(keys::constants::F12)    => window.close(),
